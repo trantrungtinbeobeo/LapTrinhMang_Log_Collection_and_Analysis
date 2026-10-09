@@ -1,6 +1,7 @@
 package com.Logcollector.server.Storage;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -8,6 +9,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -164,6 +167,76 @@ public final class LogRotation {
             throw failure.getCause();
         }
         return Collections.unmodifiableMap(failures);
+    }
+
+    /** Chạy thử đơn luồng bằng dữ liệu tạm; không sử dụng log thật của server. */
+    public static void main(String[] args) throws IOException {
+        Path testDir = Files.createTempDirectory("test-logrotation-").toRealPath();
+        System.out.println("===== TEST ISSUE #6 - LOG ROTATION =====");
+        System.out.println("Thu muc test: " + testDir);
+        try {
+            LogRotation rotation = new LogRotation(testDir);
+            Path activeLog = rotation.getActiveLogPath();
+
+            // DỮ LIỆU THỬ: sửa tại đây nếu muốn đổi kịch bản.
+            byte[] sample = new byte[(int) MAX_FILE_BYTES];
+            byte[] nextRecord = "INFO: ban ghi moi\n".getBytes(StandardCharsets.UTF_8);
+            int expiredDays = 16;
+            int recentDays = 14;
+            Arrays.fill(sample, (byte) 'A');
+            sample[sample.length - 1] = '\n';
+            Files.write(activeLog, sample, StandardOpenOption.CREATE_NEW);
+
+            checkDemo(Files.size(activeLog) == MAX_FILE_BYTES,
+                    "Tao log mau dung 20 MiB");
+            checkDemo(!rotation.shouldRotate(0), "Khong rotation khi khong ghi them");
+            checkDemo(rotation.shouldRotate(nextRecord.length),
+                    "Rotation khi ghi them se vuot 20 MiB");
+
+            // Files.write đã đóng handle. Bộ ghi thực tế cần khóa chung và flush/đóng.
+            Path archive = rotation.rotateClosedLog(nextRecord.length)
+                    .orElseThrow(() -> new IllegalStateException("Rotation khong thanh cong"));
+            checkDemo(!Files.exists(activeLog)
+                    && Arrays.equals(sample, Files.readAllBytes(archive)),
+                    "Archive giu nguyen du lieu: " + archive.getFileName());
+
+            Files.write(activeLog, nextRecord, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            checkDemo(Arrays.equals(nextRecord, Files.readAllBytes(activeLog)),
+                    "Mo lai va ghi du ban ghi vao server.log moi");
+
+            Instant now = Instant.now();
+            Path oldLog = testDir.resolve("server-" + ARCHIVE_TIME.format(LocalDateTime.ofInstant(
+                    now.minus(Duration.ofDays(expiredDays)), ZoneOffset.UTC)) + ".log");
+            Path recentLog = testDir.resolve("server-" + ARCHIVE_TIME.format(LocalDateTime.ofInstant(
+                    now.minus(Duration.ofDays(recentDays)), ZoneOffset.UTC)) + ".log");
+            Files.write(oldLog, nextRecord, StandardOpenOption.CREATE_NEW);
+            Files.write(recentLog, nextRecord, StandardOpenOption.CREATE_NEW);
+
+            Map<Path, IOException> failures = rotation.cleanupExpiredLogs();
+            checkDemo(failures.isEmpty(), "Cleanup khong co loi: " + failures);
+            checkDemo(!Files.exists(oldLog), "Xoa archive " + expiredDays + " ngay tuoi");
+            checkDemo(Files.exists(recentLog) && Files.exists(archive),
+                    "Giu archive " + recentDays + " ngay tuoi va archive vua tao");
+            checkDemo(Arrays.equals(nextRecord, Files.readAllBytes(activeLog)),
+                    "Khong xoa hoac thay doi server.log hien hanh");
+        } finally {
+            // Chỉ dọn các mục trực tiếp trong thư mục tạm của lần chạy này.
+            try (DirectoryStream<Path> entries = Files.newDirectoryStream(testDir)) {
+                for (Path entry : entries) {
+                    Files.deleteIfExists(entry);
+                }
+            }
+            Files.delete(testDir);
+            System.out.println("Da don du lieu test tam.");
+        }
+        System.out.println("ALL 9 CHECKS PASSED");
+    }
+
+    private static void checkDemo(boolean success, String description) {
+        if (!success) {
+            throw new IllegalStateException("[FAIL] " + description);
+        }
+        System.out.println("[PASS] " + description);
     }
 
     private static void validateRecordSize(long bytes) {
