@@ -20,6 +20,7 @@ public class EventGenerator {
 
     public List<String> generateEvents(int count) {
         List<String> events = new ArrayList<>();
+        Instant lastTimestamp = Instant.MIN;
 
         for (int i = 0; i < count; i++) {
             String eventType =
@@ -27,9 +28,16 @@ public class EventGenerator {
 
             String severity = getSeverity(eventType);
 
-            String timestamp = Instant.now().toString();
+            Instant now = Instant.now();
 
-            String event = timestamp
+            // Dam bao timestamp tang dan trong mot lan tao
+            if (!now.isAfter(lastTimestamp)) {
+                now = lastTimestamp.plusNanos(1);
+            }
+
+            lastTimestamp = now;
+
+            String event = now
                     + " | " + severity
                     + " | " + eventType
                     + " | Simulated network event";
