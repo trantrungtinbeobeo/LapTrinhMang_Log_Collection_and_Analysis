@@ -79,4 +79,28 @@ public class AnomalyDetector {
             alertListener.onAlertTriggered(alertType, sourceIp, message);
         }
     }
+    public static void main(String[] args) {
+        System.out.println("=== BAT DAU KIEM THU MODULE ANALYZER (ISSUE #7) ===");
+        AnomalyDetector detector = new AnomalyDetector();
+
+        // 1. Giả lập kiểm thử Brute-force từ IP 192.168.1.100 (5 lần sai liên tiếp)
+        System.out.println("\n--- [TEST 1] Kiem thu Brute-force Login ---");
+        String attackerIp = "192.168.1.100";
+        for (int i = 1; i <= 5; i++) {
+            System.out.println("Lan " + i + ": IP " + attackerIp + " dang nhap that bai...");
+            detector.processLoginEvent(attackerIp, false);
+        }
+
+        // 2. Giả lập kiểm thử Port Scan từ IP 10.0.0.50 (quét qua 10 cổng khác nhau)
+        System.out.println("\n--- [TEST 2] Kiem thu Port Scan ---");
+        String scannerIp = "10.0.0.50";
+        int[] targetPorts = {21, 22, 23, 25, 53, 80, 110, 443, 8080, 3306};
+        for (int port : targetPorts) {
+            System.out.println("IP " + scannerIp + " gui goi tin ket noi toi cong " + port);
+            detector.processConnectionEvent(scannerIp, port);
+        }
+
+        System.out.println("\n=== KIEM THU HOAN TAT THANH CONG ===");
+    }
 }
+
