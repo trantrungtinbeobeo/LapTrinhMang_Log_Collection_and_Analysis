@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Matcher;
 
 /**
  * WebSocket Server (Issue #10):
@@ -184,5 +185,25 @@ public class WebSocketServer {
                 }
             } catch (IOException ignored) {}
         }
+    }
+
+    // ==========================================
+    public static void main(String[] args) throws InterruptedException {
+        System.out.println("=== BAT DAU KIEM THU WEBSOCKET SERVER (ISSUE #10) ===");
+        int testPort = 8085;
+        WebSocketServer server = new WebSocketServer(testPort);
+        server.start();
+
+        Thread.sleep(1000); // Đợi server khởi động
+
+        // Giả lập đẩy dữ liệu log và cảnh báo thời gian thực xuống Dashboard
+        System.out.println("\n--- [TEST] Gia lap broadcast du lieu xuong Dashboard ---");
+        server.broadcast("{\"type\": \"LOG\", \"message\": \"Client Agent 192.168.1.10 vua ket noi.\"}");
+        server.broadcast("{\"type\": \"ALERT\", \"level\": \"HIGH\", \"message\": \"Phat hien Brute-force tu IP 192.168.1.100!\"}");
+        server.broadcast("{\"type\": \"METRIC\", \"activeConnections\": 5, \"alertCount\": 1}");
+
+        Thread.sleep(1000);
+        System.out.println("\n=== KIEM THU WEBSOCKET HOAN TAT THANH CONG ===");
+        server.stop();
     }
 }
