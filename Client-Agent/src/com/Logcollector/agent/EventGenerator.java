@@ -37,10 +37,12 @@ public class EventGenerator {
 
             lastTimestamp = now;
 
+            String message = getMessage(eventType);
+
             String event = now
-                    + " | " + severity
-                    + " | " + eventType
-                    + " | Simulated network event";
+                + " | " + severity
+                + " | " + eventType
+                + " | " + message;
 
             events.add(event);
         }
@@ -67,6 +69,28 @@ public class EventGenerator {
                 return "INFO";
         }
     }
+
+private String getMessage(String eventType) {
+    switch (eventType) {
+        case "LOGIN_SUCCESS":
+            return "User login successful";
+
+        case "LOGIN_FAILED":
+            return "Failed login attempt";
+
+        case "CONNECTION_TIMEOUT":
+            return "Network connection timed out";
+
+        case "HTTP_404":
+            return "Requested resource not found";
+
+        case "PORT_SCAN_SIMULATED":
+            return "Simulated port scan detected";
+
+        default:
+            return "Unknown simulated event";
+    }
+}
 
     public static void main(String[] args) {
         EventGenerator generator = new EventGenerator();
