@@ -21,15 +21,23 @@ public class ClientAgentMain {
                 continue;
             }
 
+            
+            
+            String timestamp = parts[0];
             String severity = parts[1];
             String eventType = parts[2];
             String message = parts[3];
 
             String syslog = formatter.format(
+                    timestamp,
                     severity,
                     eventType,
                     message
-            );
+                );
+
+
+
+            
 
             System.out.println(syslog);
         }

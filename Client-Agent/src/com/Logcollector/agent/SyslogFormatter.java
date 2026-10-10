@@ -8,6 +8,29 @@ public class SyslogFormatter {
 
     private static final int FACILITY = 1; // user-level messages
 
+    
+    public String format(String timestamp, String severity,
+                         String eventType, String message) {
+        int severityCode = getSeverityCode(severity);
+        int priority = FACILITY * 8 + severityCode;
+
+        String hostname = "client-agent";
+        String appName = "LogCollector";
+
+        String safeMessage = message == null ? "" : message;
+        safeMessage = safeMessage.replace("\n", " ")
+                                 .replace("\r", " ");
+
+        return "<" + priority + ">1 "
+                + timestamp + " "
+                + hostname + " "
+                + appName + " "
+                + eventType + " "
+                + "- - "
+                + safeMessage;
+    }
+
+
     public String format(String severity, String eventType, String message) {
         int severityCode = getSeverityCode(severity);
         int priority = FACILITY * 8 + severityCode;
