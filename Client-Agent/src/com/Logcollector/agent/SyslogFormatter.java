@@ -25,8 +25,9 @@ public class SyslogFormatter {
                 + timestamp + " "
                 + hostname + " "
                 + appName + " "
+                + "- "
                 + eventType + " "
-                + "- - "
+                + "- "
                 + safeMessage;
     }
 
@@ -49,8 +50,9 @@ public class SyslogFormatter {
                 + timestamp + " "
                 + hostname + " "
                 + appName + " "
+                + "- "
                 + eventType + " "
-                + "- - "
+                + "- "
                 + safeMessage;
     }
 
