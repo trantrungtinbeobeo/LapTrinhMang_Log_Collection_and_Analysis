@@ -1,4 +1,3 @@
-
 package com.Logcollector.agent;
 
 import java.time.Instant;
@@ -10,66 +9,83 @@ import java.time.format.DateTimeParseException;
 public class SyslogFormatter {
 
     private static final int VERSION = 1;
-    private static final int FACILITY = 1; // USER-level messages
+    private static final int FACILITY = 1;
 
     private final String hostname;
     private final String appName;
     private final String procId;
 
     public SyslogFormatter() {
-        this("client-agent", "LogCollector",
-                String.valueOf(ProcessHandle.current().pid()));
+        this(
+            "client-agent",
+            "LogCollector",
+            String.valueOf(ProcessHandle.current().pid())
+        );
     }
 
-    public SyslogFormatter(String hostname, String appName, String procId) {
+    public SyslogFormatter(
+            String hostname,
+            String appName,
+            String procId) {
         this.hostname = sanitizeHeader(hostname);
         this.appName = sanitizeHeader(appName);
         this.procId = sanitizeHeader(procId);
     }
 
     /**
-     * Chuyen severity thanh Syslog Severity Number.
-     * 0 = Emergency, 7 = Debug.
+     * Chuyen muc do su kien sang Syslog Severity Number.
      */
     private int toSyslogSeverity(String severity) {
         if (severity == null) {
-            return 5; // Notice
+            return 5;
         }
 
         switch (severity.toUpperCase()) {
             case "CRITICAL":
-                return 2; // Critical
+                return 2;
             case "ERROR":
-                return 3; // Error
+                return 3;
             case "WARNING":
-                return 4; // Warning
+                return 4;
             case "INFO":
-                return 6; // Informational
+                return 6;
             default:
-                return 5; // Notice
+                return 5;
         }
     }
 
     /**
-     * Tao PRI = Facility * 8 + Severity.
+     * PRI = Facility * 8 + Severity.
      */
     private int calculatePri(String severity) {
         return FACILITY * 8 + toSyslogSeverity(severity);
     }
 
     /**
-     * Dinh dang su kien theo RFC 5424:
+     * RFC 5424:
      * <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID SD MSG
      */
     public String format(EventGenerator.LogEvent event) {
         if (event == null) {
-            throw new IllegalArgumentException("Event must not be null");
+            throw new IllegalArgumentException(
+                "Event must not be null"
+            );
         }
 
-        String timestamp = normalizeTimestamp(event.getTimestamp());
-        String eventType = sanitizeHeader(event.getEventType());
+        String timestamp = normalizeTimestamp(
+            event.getTimestamp()
+        );
+
+        String eventType = sanitizeHeader(
+            event.getEventType()
+        );
+
         String message = event.getMessage() == null
-                ? "-" : event.getMessage();
+                || event.getMessage().isEmpty()
+                ? "-"
+                : event.getMessage()
+                    .replace("\r", " ")
+                    .replace("\n", " ");
 
         int pri = calculatePri(event.getSeverity());
 
@@ -110,7 +126,8 @@ public class SyslogFormatter {
         EventGenerator generator = new EventGenerator();
         SyslogFormatter formatter = new SyslogFormatter();
 
-        for (EventGenerator.LogEvent event : generator.generateEvents(5)) {
+        for (EventGenerator.LogEvent event
+                : generator.generateEvents(5)) {
             System.out.println(formatter.format(event));
         }
     }
