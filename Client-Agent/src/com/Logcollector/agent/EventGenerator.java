@@ -1,4 +1,3 @@
-
 package com.Logcollector.agent;
 
 import java.time.Instant;
@@ -55,8 +54,8 @@ public class EventGenerator {
     };
 
     private static final String[] MESSAGES = {
-        "User login successful",
         "Failed login attempt",
+        "User login successful",
         "Network connection timed out",
         "Requested resource not found",
         "Simulated port scan detected"
@@ -69,12 +68,13 @@ public class EventGenerator {
         int index = ThreadLocalRandom.current()
                 .nextInt(EVENT_TYPES.length);
 
-        String severity = getSeverity(EVENT_TYPES[index]);
+        String eventType = EVENT_TYPES[index];
+        String severity = getSeverity(eventType);
 
         return new LogEvent(
                 Instant.now().toString(),
                 severity,
-                EVENT_TYPES[index],
+                eventType,
                 MESSAGES[index]
         );
     }
