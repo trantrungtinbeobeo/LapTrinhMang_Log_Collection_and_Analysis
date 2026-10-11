@@ -1,47 +1,63 @@
-
 package com.Logcollector.agent;
 
 import java.util.List;
 
 /**
  * Diem khoi dong cua Client Agent.
- * Tao su kien gia lap va xuat log theo RFC 5424.
+ * Ho tro xuat log theo Syslog RFC 5424 hoac JSON.
  */
 public class ClientAgentMain {
 
     private static final int DEFAULT_EVENT_COUNT = 10;
 
     public static void main(String[] args) {
+        String format = args.length > 0
+                ? args[0].toLowerCase()
+                : "syslog";
+
         int eventCount = parseEventCount(args);
 
         EventGenerator eventGenerator = new EventGenerator();
-        SyslogFormatter syslogFormatter = new SyslogFormatter();
-
         List<EventGenerator.LogEvent> events =
                 eventGenerator.generateEvents(eventCount);
 
-        System.out.println("=== CLIENT AGENT - SYSLOG OUTPUT ===");
+        switch (format) {
+            case "json":
+                JsonFormatter jsonFormatter = new JsonFormatter();
+                System.out.println("=== CLIENT AGENT - JSON OUTPUT ===");
 
-        for (EventGenerator.LogEvent event : events) {
-            String syslogMessage = syslogFormatter.format(event);
-            System.out.println(syslogMessage);
+                for (EventGenerator.LogEvent event : events) {
+                    System.out.println(jsonFormatter.format(event));
+                }
+                break;
+
+            case "syslog":
+                SyslogFormatter syslogFormatter = new SyslogFormatter();
+                System.out.println("=== CLIENT AGENT - SYSLOG RFC 5424 OUTPUT ===");
+
+                for (EventGenerator.LogEvent event : events) {
+                    System.out.println(syslogFormatter.format(event));
+                }
+                break;
+
+            default:
+                System.err.println(
+                        "Dinh dang khong hop le. Hay dung: syslog hoac json"
+                );
+                return;
         }
 
         System.out.println("=== HOAN TAT ===");
         System.out.println("Tong so su kien: " + events.size());
     }
 
-    /**
-     * Cho phep truyen so luong su kien qua tham so dong lenh.
-     * Vi du: java ...ClientAgentMain 20
-     */
     private static int parseEventCount(String[] args) {
-        if (args == null || args.length == 0) {
+        if (args == null || args.length < 2) {
             return DEFAULT_EVENT_COUNT;
         }
 
         try {
-            int count = Integer.parseInt(args[0]);
+            int count = Integer.parseInt(args[1]);
 
             if (count < 0) {
                 System.err.println(
@@ -53,8 +69,7 @@ public class ClientAgentMain {
             return count;
         } catch (NumberFormatException e) {
             System.err.println(
-                    "Tham so khong hop le. Dung mac dinh "
-                    + DEFAULT_EVENT_COUNT + " su kien."
+                    "So luong su kien khong hop le. Dung mac dinh."
             );
             return DEFAULT_EVENT_COUNT;
         }

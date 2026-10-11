@@ -1,5 +1,6 @@
 package com.Logcollector.agent;
 
+
 /**
  * Dinh dang su kien thanh JSON cho Client Agent.
  */
@@ -7,9 +8,7 @@ public class JsonFormatter {
 
     public String format(EventGenerator.LogEvent event) {
         if (event == null) {
-            throw new IllegalArgumentException(
-                    "Event must not be null"
-            );
+            throw new IllegalArgumentException("Event must not be null");
         }
 
         return "{"
@@ -20,9 +19,6 @@ public class JsonFormatter {
                 + "}";
     }
 
-    /**
-     * Xu ly cac ky tu dac biet de tao JSON hop le.
-     */
     private String escapeJson(String value) {
         if (value == null) {
             return "";
@@ -63,8 +59,7 @@ public class JsonFormatter {
         EventGenerator generator = new EventGenerator();
         JsonFormatter formatter = new JsonFormatter();
 
-        for (EventGenerator.LogEvent event
-                : generator.generateEvents(5)) {
+        for (EventGenerator.LogEvent event : generator.generateEvents(5)) {
             System.out.println(formatter.format(event));
         }
     }
