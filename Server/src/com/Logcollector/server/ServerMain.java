@@ -2,7 +2,7 @@ package com.Logcollector.server;
 
 import com.Logcollector.server.Core.IngestionEngine;
 import com.Logcollector.server.Core.LogQueue;
-import com.Logcollector.server.Parser.LogParser;
+
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
