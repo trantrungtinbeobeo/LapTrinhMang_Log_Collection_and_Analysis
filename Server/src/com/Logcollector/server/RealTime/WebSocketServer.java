@@ -119,6 +119,7 @@ public class WebSocketServer {
         }
 
         // Xử lý WebSocket Handshake chuẩn RFC 6455
+        @SuppressWarnings("resource")
         private boolean doHandshake() throws Exception {
             Scanner scanner = new Scanner(in, StandardCharsets.UTF_8.name());
             String data = scanner.useDelimiter("\\r\\n\\r\\n").next();
