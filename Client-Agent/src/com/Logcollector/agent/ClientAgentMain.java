@@ -4,10 +4,6 @@ package com.Logcollector.agent;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Diem khoi dong cua Client Agent.
- * Ho tro JSON, Syslog RFC 5424 va RFC 3164.
- */
 public class ClientAgentMain {
 
     private static final int DEFAULT_EVENT_COUNT = 10;
@@ -23,13 +19,21 @@ public class ClientAgentMain {
         List<EventGenerator.LogEvent> events =
                 eventGenerator.generateEvents(eventCount);
 
+        AgentLocalQueue queue = new AgentLocalQueue();
+
+        // Dua tat ca log vao Queue
+        for (EventGenerator.LogEvent event : events) {
+            queue.enqueue(event);
+        }
+
         switch (format) {
             case "json":
                 JsonFormatter jsonFormatter = new JsonFormatter();
                 System.out.println("=== CLIENT AGENT - JSON OUTPUT ===");
 
-                for (EventGenerator.LogEvent event : events) {
-                    System.out.println(jsonFormatter.format(event));
+                while (!queue.isEmpty()) {
+                    System.out.println(
+                            jsonFormatter.format(queue.dequeue()));
                 }
                 break;
 
@@ -39,8 +43,9 @@ public class ClientAgentMain {
                 System.out.println(
                         "=== CLIENT AGENT - SYSLOG RFC 5424 OUTPUT ===");
 
-                for (EventGenerator.LogEvent event : events) {
-                    System.out.println(syslogFormatter.format(event));
+                while (!queue.isEmpty()) {
+                    System.out.println(
+                            syslogFormatter.format(queue.dequeue()));
                 }
                 break;
 
@@ -49,14 +54,30 @@ public class ClientAgentMain {
                 System.out.println(
                         "=== CLIENT AGENT - SYSLOG RFC 3164 OUTPUT ===");
 
-                for (EventGenerator.LogEvent event : events) {
-                    System.out.println(legacyFormatter.format3164(event));
+                while (!queue.isEmpty()) {
+                    System.out.println(
+                            legacyFormatter.format3164(queue.dequeue()));
                 }
+                break;
+
+            case "queue":
+                System.out.println("=== QUEUE TEST ===");
+                System.out.println("So log da them: " + queue.size());
+
+                while (!queue.isEmpty()) {
+                    EventGenerator.LogEvent event = queue.dequeue();
+                    System.out.println(
+                            event.getSeverity() + " | "
+                            + event.getEventType() + " | "
+                            + event.getMessage());
+                }
+
+                System.out.println("Queue con log: " + queue.size());
                 break;
 
             default:
                 System.err.println(
-                        "Dinh dang khong hop le. Hay dung: json, syslog, rfc5424 hoac rfc3164");
+                        "Dinh dang khong hop le. Dung: json, syslog, rfc5424, rfc3164 hoac queue");
                 return;
         }
 
