@@ -1,3 +1,4 @@
+
 package com.Logcollector.agent;
 
 import com.Logcollector.agent.Sender.TCPSender;
@@ -13,6 +14,7 @@ public class ClientAgentMain {
     private static final String DEFAULT_HOST = "127.0.0.1";
     private static final int DEFAULT_TCP_PORT = 9999;
     private static final int DEFAULT_UDP_PORT = 514;
+    private static final long RETRY_DELAY_MS = 3000;
 
     public static void main(String[] args) {
         String mode = args.length > 0
@@ -21,9 +23,9 @@ public class ClientAgentMain {
 
         int eventCount = parseEventCount(args);
 
-        EventGenerator eventGenerator = new EventGenerator();
+        EventGenerator generator = new EventGenerator();
         List<EventGenerator.LogEvent> events =
-                eventGenerator.generateEvents(eventCount);
+                generator.generateEvents(eventCount);
 
         AgentLocalQueue queue = new AgentLocalQueue();
 
@@ -32,36 +34,31 @@ public class ClientAgentMain {
         }
 
         switch (mode) {
-            case "json":
-                JsonFormatter jsonFormatter = new JsonFormatter();
-                System.out.println("=== JSON OUTPUT ===");
-
+            case "json": {
+                JsonFormatter formatter = new JsonFormatter();
                 while (!queue.isEmpty()) {
-                    System.out.println(
-                            jsonFormatter.format(queue.dequeue()));
+                    System.out.println(formatter.format(queue.dequeue()));
                 }
                 break;
+            }
 
             case "syslog":
-            case "rfc5424":
-                SyslogFormatter syslogFormatter = new SyslogFormatter();
-                System.out.println("=== SYSLOG RFC 5424 OUTPUT ===");
-
+            case "rfc5424": {
+                SyslogFormatter formatter = new SyslogFormatter();
                 while (!queue.isEmpty()) {
-                    System.out.println(
-                            syslogFormatter.format(queue.dequeue()));
+                    System.out.println(formatter.format(queue.dequeue()));
                 }
                 break;
+            }
 
-            case "rfc3164":
-                SyslogFormatter legacyFormatter = new SyslogFormatter();
-                System.out.println("=== SYSLOG RFC 3164 OUTPUT ===");
-
+            case "rfc3164": {
+                SyslogFormatter formatter = new SyslogFormatter();
                 while (!queue.isEmpty()) {
                     System.out.println(
-                            legacyFormatter.format3164(queue.dequeue()));
+                            formatter.format3164(queue.dequeue()));
                 }
                 break;
+            }
 
             case "queue":
                 testQueue(queue);
@@ -75,10 +72,14 @@ public class ClientAgentMain {
                 sendUdp(queue, args);
                 break;
 
+            case "auto":
+                sendAutomatically(queue, args);
+                break;
+
             default:
                 System.err.println(
-                        "Che do khong hop le: json, syslog, rfc5424, "
-                        + "rfc3164, queue, tcp hoac udp");
+                        "Che do hop le: json, syslog, rfc5424, "
+                        + "rfc3164, queue, tcp, udp, auto");
                 return;
         }
 
@@ -93,7 +94,6 @@ public class ClientAgentMain {
 
         while (!queue.isEmpty()) {
             EventGenerator.LogEvent event = queue.dequeue();
-
             System.out.println(
                     event.getSeverity() + " | "
                     + event.getEventType() + " | "
@@ -103,29 +103,88 @@ public class ClientAgentMain {
 
     private static void sendTcp(
             AgentLocalQueue queue, String[] args) {
-
         String host = args.length > 2 ? args[2] : DEFAULT_HOST;
         int port = parsePort(args, 3, DEFAULT_TCP_PORT);
 
         SyslogFormatter formatter = new SyslogFormatter();
         TCPSender sender = new TCPSender(host, port);
 
-        sendQueue(queue, event ->
-                sender.send(formatter.format(event)));
+        sendQueue(queue, event -> sender.send(formatter.format(event)));
     }
 
     private static void sendUdp(
             AgentLocalQueue queue, String[] args) {
-
         String host = args.length > 2 ? args[2] : DEFAULT_HOST;
         int port = parsePort(args, 3, DEFAULT_UDP_PORT);
 
         SyslogFormatter formatter = new SyslogFormatter();
         UDPSender sender = new UDPSender(host, port);
 
-        sendQueue(queue, event -> {
-            sender.send(formatter.format(event));
-        });
+        sendQueue(queue, event -> sender.send(formatter.format(event)));
+    }
+
+    private static void sendAutomatically(
+            AgentLocalQueue queue, String[] args) {
+
+        String host = args.length > 2 ? args[2] : DEFAULT_HOST;
+        int tcpPort = parsePort(args, 3, DEFAULT_TCP_PORT);
+        int udpPort = parsePort(args, 4, DEFAULT_UDP_PORT);
+
+        SyslogFormatter formatter = new SyslogFormatter();
+        TCPSender tcpSender = new TCPSender(host, tcpPort);
+        UDPSender udpSender = new UDPSender(host, udpPort);
+
+        System.out.println("=== AUTO MODE: UDP / TCP ===");
+        System.out.println("INFO, WARNING -> UDP");
+        System.out.println("ERROR, CRITICAL -> TCP");
+
+        while (!queue.isEmpty()) {
+            EventGenerator.LogEvent event = queue.peek();
+
+            if (event == null) {
+                break;
+            }
+
+            boolean useTcp =
+                    "ERROR".equalsIgnoreCase(event.getSeverity())
+                    || "CRITICAL".equalsIgnoreCase(event.getSeverity());
+
+            try {
+                String message = formatter.format(event);
+
+                if (useTcp) {
+                    tcpSender.send(message);
+                } else {
+                    udpSender.send(message);
+                }
+
+                queue.dequeue();
+
+                System.out.println(
+                        "Da gui qua " + (useTcp ? "TCP" : "UDP")
+                        + ": " + event.getEventType()
+                        + " | " + event.getSeverity());
+
+            } catch (IOException e) {
+                System.err.println(
+                        "Gui that bai cho log "
+                        + event.getEventType() + ": "
+                        + e.getMessage());
+
+                System.err.println(
+                        "Giu log trong Queue, thu lai sau "
+                        + (RETRY_DELAY_MS / 1000) + " giay.");
+
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    System.err.println(
+                            "Da dung retry. Log chua gui van nam trong Queue.");
+                    return;
+                }
+            }
+        }
     }
 
     private static void sendQueue(
@@ -146,10 +205,8 @@ public class ClientAgentMain {
                         + " | " + event.getSeverity());
 
             } catch (IOException e) {
-                System.err.println(
-                        "Gui log that bai: " + e.getMessage());
-                System.err.println(
-                        "Log van duoc giu trong Queue.");
+                System.err.println("Gui log that bai: " + e.getMessage());
+                System.err.println("Log van duoc giu trong Queue.");
                 break;
             }
         }
@@ -188,16 +245,14 @@ public class ClientAgentMain {
 
             if (count < 0) {
                 System.err.println(
-                        "So luong su kien khong duoc am. "
-                        + "Dung mac dinh.");
+                        "So luong su kien khong duoc am. Dung mac dinh.");
                 return DEFAULT_EVENT_COUNT;
             }
 
             return count;
         } catch (NumberFormatException e) {
             System.err.println(
-                    "So luong su kien khong hop le. "
-                    + "Dung mac dinh.");
+                    "So luong su kien khong hop le. Dung mac dinh.");
             return DEFAULT_EVENT_COUNT;
         }
     }
