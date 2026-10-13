@@ -3,6 +3,11 @@ package com.Logcollector.agent;
 
 import com.Logcollector.agent.Sender.TCPSender;
 import com.Logcollector.agent.Sender.UDPSender;
+import com.Logcollector.agent.demoClientagent.CyberAttackScenario;
+import com.Logcollector.agent.demoClientagent.DemoClientAgent;
+import com.Logcollector.agent.demoClientagent.LoginOfflineScenario;
+import com.Logcollector.agent.demoClientagent.ProductClickScenario;
+import com.Logcollector.agent.demoClientagent.TrafficSpikeScenario;
 
 import java.io.IOException;
 import java.util.List;
@@ -18,39 +23,68 @@ public class ClientAgentMain {
     private static final int MAX_RETRIES = 2;
 
     public static void main(String[] args) {
-        // Mac dinh su dung che do "auto" de phan phoi thong minh UDP & TCP sang ServerMain
         String mode = args.length > 0
                 ? args[0].toLowerCase(Locale.ROOT)
                 : "auto";
 
-        int eventCount = parseEventCount(args);
+        // Neu chay cac kich ban demo dac thu, chuyen tiep truc tiep toi cac file trong demoClientagent
+        switch (mode) {
+            case "demo":
+                DemoClientAgent.main(args);
+                return;
+            case "login":
+                LoginOfflineScenario.main(args);
+                return;
+            case "product":
+                ProductClickScenario.main(args);
+                return;
+            case "spike":
+            case "traffic-spike":
+                TrafficSpikeScenario.main(args);
+                return;
+            case "attack":
+                CyberAttackScenario.main(args);
+                return;
+        }
 
         System.out.println("==================================================");
         System.out.println("      KHOI DONG CLIENT AGENT (LOG PRODUCER)       ");
         System.out.println("==================================================");
-        System.out.println("[CLIENT AGENT] Che do hoat dong: " + mode.toUpperCase(Locale.ROOT));
+        System.out.println("[CLIENT AGENT] Che do duoc chon: " + mode.toUpperCase(Locale.ROOT));
+        System.out.println("[GOI Y CHE DO]:");
+        System.out.println("   • auto [n]    : Tu dong phan phoi UDP (514) & TCP (9999) [Mac dinh]");
+        System.out.println("   • login       : Chay LoginOfflineScenario (Demo ngat mang 3s & Queue)");
+        System.out.println("   • product     : Chay ProductClickScenario (Demo tuong tac Web san pham)");
+        System.out.println("   • spike [n]   : Chay TrafficSpikeScenario (Demo 100-200 request Flash Sale)");
+        System.out.println("   • attack      : Chay CyberAttackScenario (Demo Brute-force & Alert)");
+        System.out.println("   • demo        : Mo Menu chon nhanh tat ca cac kich ban");
+        System.out.println("   • tcp / udp   : Gui rieng le qua tung giao thuc");
+        System.out.println("   • syslog/json : Xuat thong diep theo chuan Syslog RFC 5424 / JSON");
+        System.out.println("==================================================\n");
 
-        // 1. Sinh su kien mau
+        int eventCount = parseEventCount(args, DEFAULT_EVENT_COUNT);
         EventGenerator generator = new EventGenerator();
-        List<EventGenerator.LogEvent> events =
-                generator.generateEvents(eventCount);
+        List<EventGenerator.LogEvent> events = generator.generateEvents(eventCount);
 
-        System.out.println("[EVENT GENERATOR] Da sinh thanh cong " + events.size() + " su kien log:");
-        for (int i = 0; i < events.size(); i++) {
+        System.out.println("[EVENT GENERATOR] Da chuan bi " + events.size() + " su kien log:");
+        for (int i = 0; i < Math.min(events.size(), 10); i++) {
             EventGenerator.LogEvent ev = events.get(i);
             System.out.println("   [" + (i + 1) + "] " + ev.getTimestamp()
                     + " | [" + ev.getSeverity() + "] "
                     + ev.getEventType() + " - " + ev.getMessage());
         }
+        if (events.size() > 10) {
+            System.out.println("   ... va " + (events.size() - 10) + " su kien nua dang cho xu ly.");
+        }
 
-        // 2. Nap vao hang doi noi bo AgentLocalQueue
+        // Nap vao hang doi noi bo AgentLocalQueue
         AgentLocalQueue queue = new AgentLocalQueue();
         for (EventGenerator.LogEvent event : events) {
             queue.enqueue(event);
         }
         System.out.println("[LOCAL QUEUE] Da nap " + queue.size() + " log vao hang doi cuc bo.\n");
 
-        // 3. Xu ly theo tung che do
+        // Xu ly theo che do truyen tai
         switch (mode) {
             case "json": {
                 System.out.println("--- XUAT LOG DINH DANG JSON ---");
@@ -98,13 +132,18 @@ public class ClientAgentMain {
                 sendUdp(queue, args);
                 break;
 
+            case "login":
+            case "product":
+            case "spike":
+            case "traffic-spike":
+            case "attack":
             case "auto":
                 sendAutomatically(queue, args);
                 break;
 
             default:
                 System.err.println("[LOI] Che do khong hop le: '" + mode + "'");
-                System.err.println("[GOI Y] Che do hop le: auto (mac dinh), tcp, udp, syslog, rfc5424, rfc3164, json, queue");
+                System.err.println("[GOI Y] Chay mac dinh hoac truyen: auto, login, product, spike, attack, tcp, udp, syslog, json");
                 return;
         }
 
@@ -314,8 +353,12 @@ public class ClientAgentMain {
     }
 
     private static int parseEventCount(String[] args) {
+        return parseEventCount(args, DEFAULT_EVENT_COUNT);
+    }
+
+    private static int parseEventCount(String[] args, int defaultCount) {
         if (args == null || args.length < 2) {
-            return DEFAULT_EVENT_COUNT;
+            return defaultCount;
         }
 
         try {
@@ -323,15 +366,15 @@ public class ClientAgentMain {
 
             if (count < 0) {
                 System.err.println(
-                        "So luong su kien khong duoc am. Dung mac dinh " + DEFAULT_EVENT_COUNT);
-                return DEFAULT_EVENT_COUNT;
+                        "So luong su kien khong duoc am. Dung mac dinh " + defaultCount);
+                return defaultCount;
             }
 
             return count;
         } catch (NumberFormatException e) {
             System.err.println(
-                    "So luong su kien khong hop le. Dung mac dinh " + DEFAULT_EVENT_COUNT);
-            return DEFAULT_EVENT_COUNT;
+                    "So luong su kien khong hop le. Dung mac dinh " + defaultCount);
+            return defaultCount;
         }
     }
 
