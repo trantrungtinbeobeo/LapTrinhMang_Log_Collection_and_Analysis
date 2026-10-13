@@ -38,7 +38,7 @@
     notice.id = "storage-notice";
     notice.className = "notice storage-notice";
     notice.setAttribute("role", "status");
-    notice.textContent = "Trình duyệt không lưu được phiên demo. Bạn vẫn có thể thử form; phiên sẽ đặt lại khi đổi trang hoặc tải lại.";
+    notice.textContent = "Trình duyệt không lưu được phiên demo. Bạn vẫn có thể thử giao diện; phiên và các thao tác đã ghi nhận có thể mất khi đổi trang hoặc tải lại.";
     document.querySelector("main").prepend(notice);
   }
 

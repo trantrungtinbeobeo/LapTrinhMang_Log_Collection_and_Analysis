@@ -75,5 +75,6 @@
     renderSession();
     email.focus();
   });
+  window.addEventListener("pageshow", event => { if (event.persisted) renderSession(); });
   renderSession();
 })();

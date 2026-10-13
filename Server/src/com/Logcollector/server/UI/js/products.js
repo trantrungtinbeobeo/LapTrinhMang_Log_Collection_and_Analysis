@@ -146,13 +146,13 @@
     if (previousFocus && previousFocus.isConnected) previousFocus.focus();
   });
 
-  const session = DemoData.getSession();
-  if (session) {
-    document.getElementById("user-name").textContent = session.name;
-    document.getElementById("user-email").textContent = session.email;
-    document.getElementById("user-avatar").textContent = session.name.charAt(0);
-    document.getElementById("login-link").hidden = true;
-    document.getElementById("logout-button").hidden = false;
+  function renderSession() {
+    const session = DemoData.getSession();
+    document.getElementById("user-name").textContent = session ? session.name : "Khách demo";
+    document.getElementById("user-email").textContent = session ? session.email : "Chưa đăng nhập demo";
+    document.getElementById("user-avatar").textContent = session ? session.name.charAt(0) : "K";
+    document.getElementById("login-link").hidden = Boolean(session);
+    document.getElementById("logout-button").hidden = !session;
   }
   document.getElementById("logout-button").addEventListener("click", () => {
     DemoData.endSession();
@@ -169,6 +169,10 @@
     }
   });
 
+  window.addEventListener("pageshow", event => {
+    if (event.persisted) { renderSession(); renderClickCount(); }
+  });
+  renderSession();
   filterProducts();
   renderClickCount();
 })();

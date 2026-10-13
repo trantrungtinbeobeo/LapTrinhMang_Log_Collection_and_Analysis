@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Dashboard phân tích log và thao tác Demo Store, sử dụng dữ liệu mô phỏng trong trình duyệt.">
+  <title>Dashboard · Log Collector &amp; Analytics</title>
+  <link rel="icon" href="assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script defer src="js/mock-data.js"></script>
+  <script defer src="js/ui-common.js"></script>
+  <script defer src="js/dashboard-data.js"></script>
+  <script defer src="js/charts.js"></script>
+  <script defer src="js/log-table.js"></script>
+  <script defer src="js/dashboard.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Đến nội dung dashboard</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="dashboard.html"><img src="assets/images/logo.svg" alt="" width="36" height="40"><span>Log Collector <span class="muted">&amp; Analytics</span></span></a>
+      <nav class="nav-links" aria-label="Điều hướng chính"><a href="dashboard.html" aria-current="page">Tổng quan</a><a href="#live-logs">Bảng log</a><a href="products.html">Cửa hàng demo</a></nav>
+      <a class="btn btn-outline btn-small" href="login.html">Tài khoản demo</a>
+    </div>
+  </header>
+  <main class="container dashboard-main" id="main">
+    <noscript><p class="notice notice-error">Bật JavaScript để hiển thị biểu đồ và bảng log mô phỏng.</p></noscript>
+    <div class="row between wrap dashboard-heading">
+      <div><span class="badge demo-badge">BẢN DEMO · CHƯA KẾT NỐI BACKEND</span><h1>Trung tâm Giám sát &amp; Phân tích Log</h1><p class="muted">Quan sát chất lượng dịch vụ, lưu lượng log và các tình huống bảo mật mẫu.</p></div>
+      <div class="window-label"><strong>5 phút gần nhất</strong><span class="small muted">Cập nhật: <time id="updated-at">—</time></span></div>
+    </div>
+    <div class="row between wrap data-toolbar">
+      <div class="field scope-field"><label for="data-scope">Nguồn dữ liệu toàn dashboard</label><select id="data-scope"><option value="all">Log mẫu + thao tác demo</option><option value="interaction">Chỉ thao tác demo đã ghi nhận</option></select></div>
+      <p class="small muted">Cập nhật mỗi giây. IP và cảnh báo có nhãn “Mẫu” là dữ liệu dựng sẵn.<br>Thao tác demo không thu thập IP; sự kiện được hiển thị sau khi chốt giây.</p>
+    </div>
+    <section class="metrics-grid" aria-label="Chỉ số trong 5 phút">
+      <article class="card metric"><span class="metric-symbol" aria-hidden="true">≡</span><h2>Tổng log</h2><strong id="total-logs">—</strong><p class="small muted">Theo nguồn dữ liệu đang chọn</p></article>
+      <article class="card metric"><span class="metric-symbol" aria-hidden="true">↗</span><h2>Tốc độ log hiện tại</h2><strong><span id="current-rate">—</span><small> log/giây</small></strong><p class="small muted">Giây hoàn tất gần nhất</p></article>
+      <article class="card metric"><span class="metric-symbol" aria-hidden="true">◎</span><h2>IP nguồn mẫu</h2><strong id="total-ips">—</strong><p class="small muted">Số IP mẫu khác nhau trong cửa sổ</p></article>
+      <article class="card metric metric-alert"><span class="metric-symbol" aria-hidden="true">!</span><h2>Cảnh báo bảo mật mẫu</h2><strong id="total-alerts">—</strong><p class="small muted">Các kịch bản có sẵn, không tự phát hiện</p></article>
+    </section>
+    <div class="dashboard-grid">
+      <section class="stack" aria-labelledby="health-title">
+        <h2 class="section-label" id="health-title"><span>01</span> Người dùng &amp; chất lượng</h2>
+        <article class="card"><div class="panel-heading"><h3>Tỉ lệ mức độ log</h3><span class="small muted">Severity</span></div><div id="severity-chart" class="donut-chart"></div><ul id="severity-legend" class="severity-legend" aria-label="Số lượng theo mức độ"></ul></article>
+        <article class="card"><div class="panel-heading"><h3>Tương tác cửa hàng</h3><span class="badge">Thao tác demo</span></div><p class="small muted">Chỉ tính thao tác đã ghi nhận trong phiên, ở cửa sổ 5 phút.</p><dl class="interaction-list"><div><dt>Đăng ký mô phỏng</dt><dd id="register-count">0</dd></div><div><dt>Đăng nhập thành công</dt><dd id="login-count">0</dd></div><div><dt>Đăng nhập thất bại</dt><dd id="failed-count">0</dd></div><div><dt>Nhấn xem sản phẩm</dt><dd id="click-count">0</dd></div></dl><h3 class="subheading">Sản phẩm vừa được xem</h3><ul id="recent-products" class="recent-products"></ul><a class="small" href="products.html">Mở cửa hàng để tạo tương tác →</a></article>
+      </section>
+      <section class="stack" aria-labelledby="traffic-title">
+        <h2 class="section-label" id="traffic-title"><span>02</span> Lưu lượng &amp; biến động</h2>
+        <article class="card traffic-card"><div class="panel-heading"><h3>Lưu lượng log theo thời gian</h3><span class="badge">5 phút</span></div><p class="small muted">Số log mỗi giây · không phải HTTP requests/giây</p><div id="traffic-chart" class="traffic-chart"></div><dl class="traffic-summary"><div><dt>Hiện tại</dt><dd><span id="traffic-current">0</span><small> log/s</small></dd></div><div><dt>Đỉnh trong cửa sổ</dt><dd><span id="peak-rate">0</span><small> log/s</small></dd></div><div><dt>Trung bình</dt><dd><span id="average-rate">0</span><small> log/s</small></dd></div></dl><p class="chart-note small muted">Biểu đồ chốt theo giây hoàn tất. Dữ liệu cũ tự rời cửa sổ sau 5 phút.</p></article>
+        <article class="card demo-controls"><span class="badge">Thử giao diện</span><h3>Quan sát một sự kiện mới</h3><p class="small muted">Thêm log mẫu để xem biểu đồ và bảng cập nhật. Muốn kiểm tra lượt xem sản phẩm, mở cửa hàng rồi quay lại dashboard trong cùng tab.</p><div class="row wrap"><button class="btn btn-primary btn-small" id="add-sample" type="button">+ Thêm log mẫu</button><button class="btn btn-outline btn-small" id="reset-samples" type="button">Tạo lại dữ liệu mẫu</button></div><p class="small muted">Mỗi lần mở trang tạo 1.200 log mẫu. Không phát log tự động, không đo latency và không gửi dữ liệu đến server.</p></article>
+      </section>
+      <section class="stack" aria-labelledby="security-title">
+        <h2 class="section-label" id="security-title"><span>03</span> Tình huống bảo mật</h2>
+        <article class="card"><div class="panel-heading"><h3>Cảnh báo nổi bật</h3><span class="badge">Mẫu</span></div><div id="security-alerts" class="alerts-list"></div><p class="small muted chart-note">Không có cơ chế phát hiện tấn công hoặc chặn IP trong frontend.</p></article>
+        <article class="card"><div class="panel-heading"><h3>IP phát sinh nhiều log</h3><span class="small muted">Top 5 · IP mẫu</span></div><ol id="top-ips" class="top-ips"></ol><p class="small muted chart-note">Nhiều log không đồng nghĩa với độc hại. Thao tác trình duyệt chưa có IP nên không nằm trong danh sách này.</p></article>
+      </section>
+    </div>
+    <section class="card logs-card" id="live-logs" aria-labelledby="logs-title">
+      <div class="row between wrap"><div><h2 id="logs-title">Bảng log trực tiếp · demo</h2><p class="small muted">Lọc trong tối đa 500 log mới nhất của nguồn đang chọn, thuộc cửa sổ 5 phút.</p></div><div class="row wrap"><button class="btn btn-outline btn-small" id="pause-table" type="button" aria-pressed="false">Tạm dừng bảng</button><button class="btn btn-outline btn-small" id="export-logs" type="button">Xuất JSON đã lọc</button></div></div>
+      <p id="table-paused" class="notice" hidden>Bảng đang tạm dừng tại ảnh chụp dữ liệu hiện tại. Chỉ số và biểu đồ vẫn cập nhật; tiếp tục để lấy log mới.</p>
+      <div class="log-filters"><div class="field"><label for="log-search">Tìm kiếm log</label><input id="log-search" type="search" maxlength="160" placeholder="Thông điệp, sự kiện, sản phẩm…"></div><div class="field"><label for="log-severity">Mức độ</label><select id="log-severity"><option value="">Tất cả severity</option><option>INFO</option><option>WARNING</option><option>ERROR</option><option>CRITICAL</option></select></div><div class="field"><label for="log-ip">IP nguồn</label><select id="log-ip"><option value="">Tất cả IP</option></select></div><button class="btn btn-outline btn-small" id="reset-filters" type="button">Xóa bộ lọc</button></div>
+      <div class="table-scroll" role="region" aria-label="Bảng log có thể cuộn ngang" tabindex="0"><table class="log-table"><caption class="sr-only">Log mới nhất trước; các bộ lọc chỉ ảnh hưởng bảng và file JSON.</caption><thead><tr><th scope="col">Thời gian</th><th scope="col">Mức độ</th><th scope="col">IP nguồn</th><th scope="col">Nguồn</th><th scope="col">Sự kiện / Thông điệp</th></tr></thead><tbody id="log-rows"></tbody></table></div>
+      <p class="empty-state muted" id="logs-empty" hidden>Không có log phù hợp. Thử xóa bộ lọc, thêm log mẫu hoặc tạo tương tác tại cửa hàng.</p>
+      <div class="row between wrap pagination"><span id="log-result-count" class="small muted"></span><div class="row"><button class="btn btn-outline btn-small" id="previous-page" type="button" aria-label="Trang log trước">← Trước</button><span id="page-label" class="small"></span><button class="btn btn-outline btn-small" id="next-page" type="button" aria-label="Trang log sau">Sau →</button></div></div>
+    </section>
+    <p id="dashboard-status" class="action-status small" role="status" aria-live="polite"></p>
+  </main>
+  <footer class="page-footer"><div class="container row between wrap"><span>Log Collector &amp; Analytics · Issue #11</span><span>Frontend mô phỏng · Không xác thực hoặc phân quyền quản trị</span></div></footer>
+</body>
+</html>

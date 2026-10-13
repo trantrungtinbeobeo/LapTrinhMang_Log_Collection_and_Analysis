@@ -22,7 +22,7 @@
 .separator::before, .separator::after { content: ""; height: 1px; background: var(--border); flex: 1; }
 .shortcuts { display: grid; gap: 10px; }
 .shortcut { display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; padding: 12px 14px; border: 0; border-radius: 8px; background: var(--soft); color: var(--ink); }
-.shortcut:hover { background: var(--soft-strong); }
+.shortcut:hover { background: var(--soft-strong); text-decoration: none; }
 .shortcut strong { display: block; font-size: 14px; }
 .shortcut small { color: var(--muted); }
 .shortcut > span:last-child { font-size: 20px; color: var(--primary); }
