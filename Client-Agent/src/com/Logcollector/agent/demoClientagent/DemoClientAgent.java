@@ -25,29 +25,34 @@ public class DemoClientAgent {
         System.out.println("   [0] Thoat chuong trinh");
         System.out.print("👉 Lua chon cua ban: ");
 
-        Scanner scanner = new Scanner(System.in);
-        String choice = scanner.nextLine().trim();
+        // Su dung try-with-resources de tu dong dong Scanner, tranh loi 'Resource leak: scanner is never closed'
+        try (Scanner scanner = new Scanner(System.in)) {
+            String choice = "";
+            if (scanner.hasNextLine()) {
+                choice = scanner.nextLine().trim();
+            }
 
-        switch (choice) {
-            case "1":
-                LoginOfflineScenario.main(new String[]{});
-                break;
-            case "2":
-                ProductClickScenario.main(new String[]{});
-                break;
-            case "3":
-                TrafficSpikeScenario.main(new String[]{});
-                break;
-            case "4":
-                CyberAttackScenario.main(new String[]{});
-                break;
-            case "0":
-                System.out.println("Da thoat chuong trinh demo.");
-                break;
-            default:
-                System.out.println("Lua chon khong hop le. Dang chay mac dinh Kich ban 2 (Product Click)...");
-                ProductClickScenario.main(new String[]{});
-                break;
+            switch (choice) {
+                case "1":
+                    LoginOfflineScenario.main(new String[]{});
+                    break;
+                case "2":
+                    ProductClickScenario.main(new String[]{});
+                    break;
+                case "3":
+                    TrafficSpikeScenario.main(new String[]{});
+                    break;
+                case "4":
+                    CyberAttackScenario.main(new String[]{});
+                    break;
+                case "0":
+                    System.out.println("Da thoat chuong trinh demo.");
+                    break;
+                default:
+                    System.out.println("Khong co lua chon hoac lua chon khong hop le. Dang chay mac dinh Kich ban 2 (Product Click)...");
+                    ProductClickScenario.main(new String[]{});
+                    break;
+            }
         }
     }
 
