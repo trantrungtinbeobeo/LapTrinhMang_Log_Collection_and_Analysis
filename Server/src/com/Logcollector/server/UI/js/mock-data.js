@@ -8,7 +8,8 @@
     REGISTER_SUCCESS: "Hoàn tất biểu mẫu đăng ký mô phỏng; không tạo tài khoản thật.",
     LOGIN_SUCCESS: "Đăng nhập bằng tài khoản mẫu Minh An.",
     LOGIN_FAILED: "Thông tin đăng nhập không khớp tài khoản mẫu.",
-    LOGOUT: "Kết thúc phiên trải nghiệm demo."
+    LOGOUT: "Kết thúc phiên trải nghiệm demo.",
+    PRODUCT_CLICK: "Xem chi tiết sản phẩm trong cửa hàng demo."
   });
   let canPersist = true;
   let state = { version: 1, session: null, events: [] };
@@ -22,7 +23,8 @@
         && Number.isFinite(event.at)).slice(-500).map(event => ({
           type: event.type, at: event.at,
           severity: event.type === "LOGIN_FAILED" ? "WARNING" : "INFO",
-          message: messages[event.type]
+          message: messages[event.type],
+          ...(event.type === "PRODUCT_CLICK" ? productDetails(event) : {})
         }));
     }
   } catch {
@@ -40,9 +42,20 @@
     }
   }
 
-  function recordEvent(type) {
+  function productDetails(details) {
+    return {
+      productId: typeof details.productId === "string" ? details.productId.slice(0, 40) : "",
+      productName: typeof details.productName === "string" ? details.productName.slice(0, 160) : "",
+      actor: details.actor === customer.email ? customer.email : "Khách demo"
+    };
+  }
+
+  function recordEvent(type, details = {}) {
     if (!Object.hasOwn(messages, type)) return;
-    state.events.push({ type, at: Date.now(), severity: type === "LOGIN_FAILED" ? "WARNING" : "INFO", message: messages[type] });
+    state.events.push({
+      type, at: Date.now(), severity: type === "LOGIN_FAILED" ? "WARNING" : "INFO", message: messages[type],
+      ...(type === "PRODUCT_CLICK" ? productDetails(details) : {})
+    });
     state.events = state.events.slice(-500);
     persist();
   }
@@ -59,6 +72,16 @@
     persist();
   }
 
+  function recordProductClick(productId) {
+    const product = (window.DemoCatalog || []).find(item => item.id === productId);
+    if (!product) return;
+    recordEvent("PRODUCT_CLICK", {
+      productId: product.id,
+      productName: product.name,
+      actor: state.session ? customer.email : "Khách demo"
+    });
+  }
+
   window.DemoData = Object.freeze({
     customer,
     // Public fixture only. This comparison is NOT an authentication boundary.
@@ -66,6 +89,8 @@
     startCustomerSession,
     endSession,
     recordEvent,
+    recordProductClick,
+    getEvents: () => state.events.map(event => ({ ...event })),
     getSession: () => state.session ? { ...state.session } : null,
     storageAvailable: () => canPersist
   });

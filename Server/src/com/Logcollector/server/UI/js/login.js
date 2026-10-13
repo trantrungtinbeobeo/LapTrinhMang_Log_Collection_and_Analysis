@@ -18,7 +18,7 @@
     form.hidden = Boolean(session);
     customerShortcut.disabled = Boolean(session);
     if (session) {
-      document.getElementById("session-description").textContent = `Xin chào ${session.name}. Phiên khách hàng demo đã sẵn sàng. Trang sản phẩm sẽ được bổ sung ở phần tiếp theo.`;
+      document.getElementById("session-description").textContent = `Xin chào ${session.name}. Phiên khách hàng demo đã sẵn sàng.`;
     }
   }
 
@@ -28,6 +28,7 @@
     DemoUI.resetPasswordVisibility(form);
     error.hidden = true;
     renderSession();
+    location.href = "products.html";
   }
 
   form.addEventListener("submit", event => {

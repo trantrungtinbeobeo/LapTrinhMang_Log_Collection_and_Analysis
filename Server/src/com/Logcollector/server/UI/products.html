@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cửa hàng mẫu để kiểm thử thao tác xem sản phẩm, chỉ sử dụng dữ liệu mô phỏng.">
+  <title>Sản phẩm · Demo Store</title>
+  <link rel="icon" href="assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/products.css">
+  <script defer src="js/products-data.js"></script>
+  <script defer src="js/mock-data.js"></script>
+  <script defer src="js/ui-common.js"></script>
+  <script defer src="js/products.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Đến danh sách sản phẩm</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="row"><a class="brand" href="products.html"><img src="assets/images/logo.svg" alt="" width="36" height="40">Demo Store</a><span class="badge demo-badge"><span class="dot"></span>Bản demo — dữ liệu mô phỏng</span></div>
+      <nav class="nav-links" aria-label="Điều hướng cửa hàng"><a href="products.html" aria-current="page">Sản phẩm</a><a href="login.html">Tài khoản demo</a></nav>
+      <details class="account" id="account-menu">
+        <summary aria-label="Menu tài khoản demo"><span class="account-name"><strong id="user-name">Khách demo</strong><span class="muted" id="user-email">Chưa đăng nhập demo</span></span><span class="avatar" id="user-avatar" aria-hidden="true">K</span><span aria-hidden="true">⌄</span></summary>
+        <div class="account-menu"><p class="small muted">Phiên trải nghiệm frontend</p><a href="login.html" class="btn btn-outline" id="login-link">Đăng nhập demo</a><button type="button" class="btn" id="logout-button" hidden>Đăng xuất</button></div>
+      </details>
+    </div>
+  </header>
+  <main id="main" class="container store-main">
+    <noscript><p class="notice notice-error">Bật JavaScript để hiển thị danh sách sản phẩm và tương tác demo.</p></noscript>
+    <div class="row between wrap search-row">
+      <div class="search-box"><label class="sr-only" for="product-search">Tìm sản phẩm theo tên, mã hoặc danh mục</label><input id="product-search" type="search" placeholder="Tìm theo tên thiết bị, mã sản phẩm hoặc danh mục…" maxlength="160"><button class="icon-btn" id="clear-search" type="button" aria-label="Xóa tìm kiếm" hidden>×</button></div>
+      <span class="badge" title="Đếm PRODUCT_CLICK trong tối đa 500 sự kiện demo được lưu"><span class="dot"></span>Lượt nhấn đã lưu: <strong id="session-click-count">0</strong></span>
+    </div>
+    <div class="row between wrap catalog-header">
+      <div><span class="eyebrow">Demo Store / Bộ sưu tập</span><h1>Khám phá sản phẩm</h1><p>Lựa chọn thiết bị phù hợp với bạn.</p></div>
+      <div class="category-tabs" role="group" aria-label="Lọc danh mục sản phẩm">
+        <button type="button" data-category="all" aria-pressed="true">Tất cả</button>
+        <button type="button" data-category="laptop" aria-pressed="false">Laptop</button>
+        <button type="button" data-category="phone" aria-pressed="false">Điện thoại</button>
+        <button type="button" data-category="accessory" aria-pressed="false">Phụ kiện</button>
+      </div>
+    </div>
+    <p class="sr-only" id="product-count" role="status" aria-live="polite"></p>
+    <div class="product-grid" id="product-grid"></div>
+    <div class="card empty-state" id="product-empty" hidden><h2>Không tìm thấy sản phẩm</h2><p>Thử từ khóa khác hoặc xem lại tất cả danh mục.</p><button type="button" id="reset-products" class="btn btn-primary">Xóa bộ lọc</button></div>
+  </main>
+  <dialog class="product-dialog" id="product-dialog" aria-labelledby="detail-name" aria-describedby="detail-description">
+    <div class="row between dialog-header"><span class="badge"><span class="dot"></span>Chi tiết sản phẩm <span id="detail-code" class="mono"></span></span><button class="icon-btn" type="button" data-close-dialog aria-label="Đóng chi tiết sản phẩm" autofocus>×</button></div>
+    <div class="dialog-body">
+      <img class="dialog-image" id="detail-image" src="assets/images/product-placeholder.svg" alt="" width="400" height="400">
+      <div class="dialog-info">
+        <span class="small muted" id="detail-category"></span>
+        <h2 id="detail-name">Chi tiết sản phẩm</h2>
+        <div class="dialog-price"><span class="small muted">Giá niêm yết</span><strong id="detail-price"></strong></div>
+        <div><h3>Thông số nổi bật</h3><p class="dialog-specs" id="detail-description"></p></div>
+        <div class="dialog-actions"><button class="btn btn-primary" type="button" data-close-dialog>Tiếp tục xem sản phẩm ✓</button><button class="btn" type="button" data-close-dialog>Đóng</button></div>
+      </div>
+    </div>
+  </dialog>
+  <footer class="store-footer">
+    <div class="container">
+      <div class="footer-columns">
+        <div><strong>Demo Store</strong><p class="small muted">Cửa hàng mẫu để trải nghiệm giao diện và quan sát thao tác xem sản phẩm.</p></div>
+        <div><strong>Khám phá</strong><ul class="small"><li><a href="products.html">Danh mục sản phẩm</a></li><li><a href="login.html">Đăng nhập demo</a></li><li><a href="register.html">Đăng ký demo</a></li></ul></div>
+        <div><strong>Môi trường thử nghiệm</strong><p class="small muted">Dữ liệu chỉ được mô phỏng trong trình duyệt. Chưa kết nối backend hoặc đo latency.</p></div>
+      </div>
+      <div class="row between wrap footer-bottom small muted"><span>Demo Store · Log Collector &amp; Analytics</span><span>Bản demo — dữ liệu mô phỏng</span></div>
+    </div>
+  </footer>
+</body>
+</html>
