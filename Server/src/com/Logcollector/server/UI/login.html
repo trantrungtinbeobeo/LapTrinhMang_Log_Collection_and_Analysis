@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Đăng nhập mô phỏng Demo Store — frontend Log Collector & Analytics.">
+  <title>Đăng nhập · Demo Store</title>
+  <link rel="icon" href="assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <script defer src="js/mock-data.js"></script>
+  <script defer src="js/ui-common.js"></script>
+  <script defer src="js/login.js"></script>
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main">Đến nội dung chính</a>
+  <header class="auth-header">
+    <div class="row"><a class="brand" href="login.html">Demo Store</a><span class="badge demo-badge"><span class="dot"></span>Bản demo — dữ liệu mô phỏng</span></div>
+    <p>Hệ thống phân tích hành vi &amp; theo dõi sự kiện trực tuyến</p>
+  </header>
+  <main class="auth-main" id="main">
+    <section class="card auth-card" aria-labelledby="login-title">
+      <div class="auth-heading">
+        <div class="auth-logo"><img src="assets/images/logo.svg" alt="" width="42" height="46"></div>
+        <h1 id="login-title">Chào mừng trở lại</h1>
+        <p>Đăng nhập để tiếp tục</p>
+      </div>
+      <noscript><p class="notice notice-error">Bật JavaScript để sử dụng các tương tác mô phỏng.</p></noscript>
+      <div id="registration-notice" class="notice notice-success" role="status" hidden>Đăng ký mô phỏng thành công. Dùng tài khoản demo bên dưới để tiếp tục; thông tin đăng ký không được lưu.</div>
+      <div id="login-error" class="notice notice-error" role="alert" hidden><strong>Thông báo xác thực</strong><p>Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.</p></div>
+      <div id="login-success" class="notice notice-success" role="status" hidden><strong>Đăng nhập mô phỏng thành công.</strong><p id="session-description"></p><div class="row wrap"><a class="btn btn-primary btn-small" href="products.html">Xem sản phẩm →</a><button class="btn btn-outline btn-small" id="logout-demo" type="button">Đăng xuất demo</button></div></div>
+      <form id="login-form" class="auth-form" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" required maxlength="254" placeholder="minhan@demostore.vn" value="minhan@demostore.vn" aria-describedby="email-error">
+          <p id="email-error" class="field-error" hidden></p>
+        </div>
+        <div class="field">
+          <label for="password">Mật khẩu</label>
+          <div class="password-field">
+            <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="128" placeholder="Nhập mật khẩu demo" aria-describedby="password-error">
+            <button class="password-toggle" type="button" data-toggle-password="password" aria-controls="password" aria-pressed="false" aria-label="Hiện mật khẩu">Hiện</button>
+          </div>
+          <p id="password-error" class="field-error" hidden></p>
+        </div>
+        <button id="login-submit" class="btn btn-primary btn-block" type="submit">Đăng nhập <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="demo-help">Tài khoản mẫu: <strong>minhan@demostore.vn</strong><br>Mật khẩu demo: <code>Demo123!</code></p>
+      <p class="auth-switch">Chưa có tài khoản? <a href="register.html">Đăng ký</a></p>
+      <div class="separator">Hoặc truy cập nhanh bản demo</div>
+      <div class="shortcuts">
+        <button id="customer-shortcut" class="shortcut" type="button"><span><strong>Trải nghiệm khách hàng</strong><small>Khám phá sản phẩm với vai trò Minh An</small></span><span aria-hidden="true">›</span></button>
+        <a id="admin-shortcut" class="shortcut" href="dashboard.html"><span><strong>Xem dashboard quản trị</strong><small>Quan sát log và thao tác demo đã ghi nhận</small></span><span aria-hidden="true">›</span></a>
+        <p class="demo-help">Trải nghiệm đăng ký, đăng nhập, sản phẩm và dashboard. Dashboard mở trực tiếp để thử giao diện; đây không phải cơ chế xác thực hoặc phân quyền thật.</p>
+      </div>
+    </section>
+  </main>
+  <footer class="auth-footer">Demo Store · Log Collector &amp; Analytics · Bản thử nghiệm frontend</footer>
+</body>
+</html>

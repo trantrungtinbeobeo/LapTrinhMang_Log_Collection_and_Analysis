@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng ký · Demo Store</title>
+  <link rel="icon" href="assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <script defer src="js/mock-data.js"></script>
+  <script defer src="js/ui-common.js"></script>
+  <script defer src="js/register.js"></script>
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main">Đến nội dung chính</a>
+  <header class="auth-header">
+    <div class="row"><a class="brand" href="login.html">Demo Store</a><span class="badge demo-badge"><span class="dot"></span>Bản demo — dữ liệu mô phỏng</span></div>
+    <p>Hệ thống phân tích hành vi &amp; theo dõi sự kiện trực tuyến</p>
+  </header>
+  <main class="auth-main" id="main">
+    <section class="card auth-card register-card" aria-labelledby="register-title">
+      <div class="auth-heading">
+        <div class="auth-logo"><img src="assets/images/logo.svg" alt="" width="42" height="46"></div>
+        <span class="badge demo-badge"><span class="dot"></span>Bản demo — dữ liệu mô phỏng</span>
+        <h1 id="register-title">Tạo tài khoản</h1>
+        <p>Đăng ký để khám phá sản phẩm và luồng sự kiện đo lường</p>
+      </div>
+      <noscript><p class="notice notice-error">Bật JavaScript để sử dụng các tương tác mô phỏng.</p></noscript>
+      <div class="scenario-panel">
+        <p class="small muted" id="scenario-label">CHẾ ĐỘ KIỂM THỬ DEMO</p>
+        <div class="scenario-buttons" role="group" aria-labelledby="scenario-label">
+          <button type="button" data-scenario="default" aria-pressed="true">Chuẩn</button>
+          <button type="button" data-scenario="duplicate" aria-pressed="false">Lỗi trùng lặp</button>
+          <button type="button" data-scenario="success" aria-pressed="false">Thành công</button>
+        </div>
+      </div>
+      <div id="register-error" class="notice notice-error" role="alert" hidden>Email đã được sử dụng trong kịch bản demo.</div>
+      <div id="register-success" class="notice notice-success" role="status" hidden><strong>Đăng ký mô phỏng thành công.</strong><p>Không tạo tài khoản thật hoặc lưu mật khẩu. <a href="login.html?registered=1">Tiếp tục đăng nhập bằng tài khoản demo →</a></p></div>
+      <form id="register-form" class="auth-form" novalidate>
+        <div class="field">
+          <label for="fullname">Họ và tên <span class="required">*</span></label>
+          <input id="fullname" name="fullname" autocomplete="name" placeholder="VD: Nguyễn Minh An" required maxlength="80" aria-describedby="fullname-error">
+          <p id="fullname-error" class="field-error" hidden></p>
+        </div>
+        <div class="field">
+          <label for="email">Email <span class="required">*</span></label>
+          <input id="email" name="email" type="email" autocomplete="email" placeholder="email@example.com" required maxlength="254" aria-describedby="email-error">
+          <p id="email-error" class="field-error" hidden></p>
+        </div>
+        <div class="field">
+          <div class="label-row"><label for="password">Mật khẩu <span class="required">*</span></label><span class="small muted" id="password-hint">Tối thiểu 6 ký tự (demo)</span></div>
+          <div class="password-field">
+            <input id="password" name="password" type="password" autocomplete="new-password" placeholder="Nhập ít nhất 6 ký tự" required minlength="6" maxlength="128" aria-describedby="password-error password-hint">
+            <button class="password-toggle" type="button" data-toggle-password="password" aria-controls="password" aria-pressed="false" aria-label="Hiện mật khẩu">Hiện</button>
+          </div>
+          <p id="password-error" class="field-error" hidden></p>
+        </div>
+        <div class="field">
+          <label for="confirm-password">Xác nhận mật khẩu <span class="required">*</span></label>
+          <div class="password-field">
+            <input id="confirm-password" name="confirm-password" type="password" autocomplete="new-password" placeholder="Nhập lại mật khẩu vừa đặt" required maxlength="128" aria-describedby="confirm-password-error">
+            <button class="password-toggle" type="button" data-toggle-password="confirm-password" aria-controls="confirm-password" aria-pressed="false" aria-label="Hiện mật khẩu xác nhận">Hiện</button>
+          </div>
+          <p id="confirm-password-error" class="field-error" hidden></p>
+        </div>
+        <button id="register-submit" class="btn btn-primary btn-block" type="submit">Đăng ký tài khoản</button>
+      </form>
+      <p class="notice">Chỉ mô phỏng giao diện. Không lưu tài khoản và không hỗ trợ đăng ký quản trị viên. Email <strong>demo@example.com</strong> dùng để thử lỗi trùng lặp.</p>
+      <p class="auth-switch">Đã có tài khoản? <a href="login.html">Đăng nhập →</a></p>
+    </section>
+  </main>
+  <footer class="auth-footer">Demo Store · Log Collector &amp; Analytics · Bản thử nghiệm frontend</footer>
+</body>
+</html>
