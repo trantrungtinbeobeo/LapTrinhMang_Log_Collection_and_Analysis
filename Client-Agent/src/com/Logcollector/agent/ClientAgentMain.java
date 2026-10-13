@@ -62,7 +62,7 @@ public class ClientAgentMain {
         System.out.println("   • syslog/json : Xuat thong diep theo chuan Syslog RFC 5424 / JSON");
         System.out.println("==================================================\n");
 
-        int eventCount = parseEventCount(args, DEFAULT_EVENT_COUNT);
+        int eventCount = parseEventCount(args);
         EventGenerator generator = new EventGenerator();
         List<EventGenerator.LogEvent> events = generator.generateEvents(eventCount);
 
@@ -353,12 +353,8 @@ public class ClientAgentMain {
     }
 
     private static int parseEventCount(String[] args) {
-        return parseEventCount(args, DEFAULT_EVENT_COUNT);
-    }
-
-    private static int parseEventCount(String[] args, int defaultCount) {
         if (args == null || args.length < 2) {
-            return defaultCount;
+            return DEFAULT_EVENT_COUNT;
         }
 
         try {
@@ -366,15 +362,15 @@ public class ClientAgentMain {
 
             if (count < 0) {
                 System.err.println(
-                        "So luong su kien khong duoc am. Dung mac dinh " + defaultCount);
-                return defaultCount;
+                        "So luong su kien khong duoc am. Dung mac dinh " + DEFAULT_EVENT_COUNT);
+                return DEFAULT_EVENT_COUNT;
             }
 
             return count;
         } catch (NumberFormatException e) {
             System.err.println(
-                    "So luong su kien khong hop le. Dung mac dinh " + defaultCount);
-            return defaultCount;
+                    "So luong su kien khong hop le. Dung mac dinh " + DEFAULT_EVENT_COUNT);
+            return DEFAULT_EVENT_COUNT;
         }
     }
 
