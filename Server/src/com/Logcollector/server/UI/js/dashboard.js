@@ -126,8 +126,52 @@
     else startUpdating();
   });
   window.addEventListener("pagehide", () => { clearInterval(timer); clearTimeout(statusTimer); });
-  window.addEventListener("pageshow", startUpdating);
   startUpdating();
+
+  // Quan ly cac badge va bieu do Tang truong 200 Nguoi dung
+  function updateConcurrencyBadges(m) {
+    if (!m) return;
+    const uEl = byId("sim-active-users");
+    if (uEl) uEl.innerHTML = `${m.users} <small style="font-size: 13px; font-weight: normal; color: #94a3b8;">/ 200 người</small>`;
+    const latEl = byId("sim-latency");
+    if (latEl) {
+      latEl.innerHTML = `${m.latency} <small style="font-size: 13px; font-weight: normal; color: #94a3b8;">ms</small>`;
+      latEl.style.color = m.latency > 500 ? "#ef4444" : m.latency > 150 ? "#f59e0b" : "#f8fafc";
+    }
+    const impEl = byId("sim-shopping-impact");
+    if (impEl) {
+      impEl.innerHTML = `${m.shoppingImpact}<small style="font-size: 13px; font-weight: normal; color: #94a3b8;">%</small>`;
+      impEl.style.color = m.shoppingImpact > 50 ? "#ef4444" : m.shoppingImpact > 20 ? "#f59e0b" : "#f8fafc";
+    }
+    const errEl = byId("sim-error-rate");
+    if (errEl) {
+      errEl.innerHTML = `${m.pred404Rate}<small style="font-size: 13px; font-weight: normal; color: #94a3b8;">%</small>`;
+      errEl.style.color = m.pred404Rate > 15 ? "#ef4444" : m.pred404Rate > 3 ? "#f59e0b" : "#f87171";
+    }
+    const badge = byId("concurrency-status-badge");
+    if (badge) {
+      if (m.users > 150) {
+        badge.textContent = "🔴 NGHẼN TẢI NẶNG: >150 Users (Lỗi 404 cao)";
+        badge.style.background = "#7f1d1d";
+        badge.style.color = "#fecaca";
+      } else if (m.users > 80) {
+        badge.textContent = "🟡 CẢNH BÁO: 81–150 Users (Bắt đầu chậm)";
+        badge.style.background = "#78350f";
+        badge.style.color = "#fef3c7";
+      } else {
+        badge.textContent = "● Tải ổn định: 1–80 Users";
+        badge.style.background = "#065f46";
+        badge.style.color = "#34d399";
+      }
+    }
+  }
+  window.updateConcurrencyBadges = updateConcurrencyBadges;
+
+  // Khoi tao ve bieu do Concurrency ngay khi load trang
+  const concContainer = byId("concurrency-chart");
+  if (concContainer && window.DashboardCharts && window.DashboardCharts.drawConcurrency) {
+    window.DashboardCharts.drawConcurrency(concContainer, null);
+  }
 
   // Quan ly Khung Terminal Log Thô (Raw Syslog Stream Console)
   const rawConsole = byId("raw-console");
@@ -306,6 +350,27 @@
             appendRawTerminal(data.raw);
           } else if (data.message) {
             appendRawTerminal(data.message);
+          }
+
+          // Xu ly du lieu do luong va du bao tang truong 200 nguoi dung
+          const rawContent = (data.raw || data.message || "");
+          if (rawContent.includes("ActiveUsers:")) {
+            const mUsers = rawContent.match(/ActiveUsers:\s*(\d+)/);
+            const mLat = rawContent.match(/Latency:\s*(\d+)ms/);
+            const mImpact = rawContent.match(/Impact:\s*([0-9.]+)%/);
+            const mPred404 = rawContent.match(/Pred404:\s*([0-9.]+)%/);
+            if (mUsers) {
+              const u = parseInt(mUsers[1], 10);
+              const lat = mLat ? parseInt(mLat[1], 10) : 18;
+              const imp = mImpact ? parseFloat(mImpact[1]) : 0;
+              const p404 = mPred404 ? parseFloat(mPred404[1]) : 0;
+              const simData = { activeUsers: u, latency: lat, shoppingImpact: imp, pred404Rate: p404 };
+              updateConcurrencyBadges(simData);
+              const chartEl = byId("concurrency-chart");
+              if (chartEl && window.DashboardCharts && window.DashboardCharts.drawConcurrency) {
+                window.DashboardCharts.drawConcurrency(chartEl, simData);
+              }
+            }
           }
 
           if (window.DashboardData && window.DashboardData.addLiveLog) {

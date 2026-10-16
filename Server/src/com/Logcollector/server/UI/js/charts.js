@@ -263,5 +263,201 @@
     container.replaceChildren(svg);
   }
 
-  window.DashboardCharts = Object.freeze({ drawSeverity, drawTraffic });
+  function drawConcurrency(container, liveData) {
+    if (!container) return;
+    const width = 960, height = 240, left = 48, right = 48, top = 20, bottom = 32;
+    const plotWidth = width - left - right, plotHeight = height - top - bottom;
+    const maxUsers = 200;
+    const maxLatency = 1200;
+    const maxErrorRate = 40;
+
+    const x = u => left + (u / maxUsers) * plotWidth;
+    const yLatency = lat => top + plotHeight - (Math.min(maxLatency, lat) / maxLatency) * plotHeight;
+    const yError = err => top + plotHeight - (Math.min(maxErrorRate, err) / maxErrorRate) * plotHeight;
+
+    function calcMetrics(u) {
+      let lat, impact, err404;
+      if (u <= 80) {
+        lat = 18 + u * 0.9;
+        impact = (u / 80.0) * 8.0;
+        err404 = 0.05 + (u / 80.0) * 0.45;
+      } else if (u <= 150) {
+        const extra = u - 80;
+        lat = 90 + Math.pow(extra, 1.45) * 2.2;
+        impact = 10.0 + (extra / 70.0) * 50.0;
+        err404 = 1.0 + (extra / 70.0) * 12.0;
+      } else {
+        const extra = u - 150;
+        lat = 450 + Math.pow(extra, 1.6) * 7.5;
+        impact = 65.0 + (extra / 50.0) * 30.0;
+        err404 = 15.0 + (extra / 50.0) * 20.0;
+      }
+      return {
+        users: u,
+        latency: Math.round(lat),
+        shoppingImpact: Number(impact.toFixed(1)),
+        pred404Rate: Number(err404.toFixed(1))
+      };
+    }
+
+    const svg = svgElement("svg", {
+      viewBox: `0 0 ${width} ${height}`, role: "img",
+      style: "width: 100%; height: 100%; display: block;",
+      "aria-label": "Biểu đồ mô hình tăng trưởng 200 người dùng đồng thời và dự báo độ trễ + lỗi 404"
+    });
+
+    // 1. Ve cac vung phan cap chiu tai (Zones)
+    const x80 = x(80), x150 = x(150), x200 = x(200);
+    svg.append(svgElement("rect", {
+      x: left, y: top, width: x80 - left, height: plotHeight,
+      fill: "#10b981", "fill-opacity": "0.06"
+    }));
+    svg.append(svgElement("rect", {
+      x: x80, y: top, width: x150 - x80, height: plotHeight,
+      fill: "#f59e0b", "fill-opacity": "0.08"
+    }));
+    svg.append(svgElement("rect", {
+      x: x150, y: top, width: x200 - x150, height: plotHeight,
+      fill: "#ef4444", "fill-opacity": "0.10"
+    }));
+
+    // Grid lines & Axis labels
+    [0, 300, 600, 900, 1200].forEach(latVal => {
+      const yVal = yLatency(latVal);
+      svg.append(svgElement("line", { x1: left, y1: yVal, x2: width - right, y2: yVal, class: "chart-grid" }));
+      svg.append(svgElement("text", { x: left - 8, y: yVal + 3, "text-anchor": "end", class: "chart-axis", fill: "#f59e0b", "font-size": "10px" }, `${latVal}ms`));
+      const errVal = Math.round((latVal / maxLatency) * maxErrorRate);
+      svg.append(svgElement("text", { x: width - right + 8, y: yVal + 3, "text-anchor": "start", class: "chart-axis", fill: "#f43f5e", "font-size": "10px" }, `${errVal}%`));
+    });
+
+    // X Axis ticks: 0, 50, 80, 100, 150, 200 users
+    [0, 50, 80, 100, 150, 200].forEach(uVal => {
+      const xVal = x(uVal);
+      svg.append(svgElement("line", { x1: xVal, y1: top, x2: xVal, y2: top + plotHeight, stroke: "#334155", "stroke-dasharray": "2,4" }));
+      svg.append(svgElement("text", {
+        x: xVal, y: height - 10, "text-anchor": "middle", class: "chart-axis",
+        fill: uVal > 150 ? "#f87171" : uVal > 80 ? "#fbbf24" : "#94a3b8", "font-size": "10.5px"
+      }, `${uVal} Users`));
+    });
+
+    // Generate path points for 1 to 200 users
+    const latPoints = [];
+    const errPoints = [];
+    for (let u = 0; u <= maxUsers; u += 2) {
+      const m = calcMetrics(u);
+      latPoints.push(`${x(u).toFixed(1)},${yLatency(m.latency).toFixed(1)}`);
+      errPoints.push(`${x(u).toFixed(1)},${yError(m.pred404Rate).toFixed(1)}`);
+    }
+
+    svg.append(svgElement("polyline", {
+      points: latPoints.join(" "), fill: "none", stroke: "#f59e0b", "stroke-width": 2.5, "stroke-linejoin": "round"
+    }));
+
+    svg.append(svgElement("polyline", {
+      points: errPoints.join(" "), fill: "none", stroke: "#f43f5e", "stroke-width": 2.2, "stroke-dasharray": "4,3", "stroke-linejoin": "round"
+    }));
+
+    // Current live progress marker
+    const curU = (liveData && liveData.activeUsers) ? liveData.activeUsers : 0;
+    if (curU > 0) {
+      const liveX = x(curU);
+      const liveM = calcMetrics(curU);
+      svg.append(svgElement("line", {
+        x1: liveX, y1: top, x2: liveX, y2: top + plotHeight,
+        stroke: "#38bdf8", "stroke-width": "2"
+      }));
+      svg.append(svgElement("circle", {
+        cx: liveX, cy: yLatency(liveM.latency), r: "6",
+        fill: "#38bdf8", stroke: "#ffffff", "stroke-width": "2"
+      }));
+    }
+
+    // Interactive Hover Elements
+    const hoverLine = svgElement("line", {
+      x1: left, y1: top, x2: left, y2: top + plotHeight,
+      stroke: "#cbd5e1", "stroke-width": "1.2", "stroke-dasharray": "3,3",
+      style: "display: none; pointer-events: none;"
+    });
+    const hoverDotLat = svgElement("circle", {
+      cx: left, cy: top, r: "5.5", fill: "#f59e0b", stroke: "#ffffff", "stroke-width": "2",
+      style: "display: none; pointer-events: none;"
+    });
+    const hoverDotErr = svgElement("circle", {
+      cx: left, cy: top, r: "5.5", fill: "#f43f5e", stroke: "#ffffff", "stroke-width": "2",
+      style: "display: none; pointer-events: none;"
+    });
+
+    const tipGroup = svgElement("g", { style: "display: none; pointer-events: none;" });
+    const tipBg = svgElement("rect", {
+      width: "250", height: "88", rx: "8",
+      fill: "#0f172a", "fill-opacity": "0.96", stroke: "#334155", "stroke-width": "1.2"
+    });
+    const tipUsers = svgElement("text", { x: "10", y: "18", fill: "#38bdf8", "font-weight": "700", "font-size": "11.5px" });
+    const tipLat = svgElement("text", { x: "10", y: "36", fill: "#fbbf24", "font-size": "11px" });
+    const tipImpact = svgElement("text", { x: "10", y: "54", fill: "#cbd5e1", "font-size": "10.5px" });
+    const tip404 = svgElement("text", { x: "10", y: "72", fill: "#f87171", "font-weight": "600", "font-size": "11px" });
+    tipGroup.append(tipBg, tipUsers, tipLat, tipImpact, tip404);
+
+    const overlay = svgElement("rect", {
+      x: left, y: top, width: plotWidth, height: plotHeight,
+      fill: "transparent", style: "cursor: crosshair; pointer-events: all;"
+    });
+
+    overlay.addEventListener("pointermove", (e) => {
+      const rect = overlay.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const clampedX = Math.max(0, Math.min(plotWidth, mouseX));
+      const u = Math.max(1, Math.min(maxUsers, Math.round((clampedX / plotWidth) * maxUsers)));
+      const m = calcMetrics(u);
+
+      const cx = x(u);
+      const cyLat = yLatency(m.latency);
+      const cyErr = yError(m.pred404Rate);
+
+      hoverLine.setAttribute("x1", cx);
+      hoverLine.setAttribute("x2", cx);
+      hoverLine.style.display = "block";
+
+      hoverDotLat.setAttribute("cx", cx);
+      hoverDotLat.setAttribute("cy", cyLat);
+      hoverDotLat.style.display = "block";
+
+      hoverDotErr.setAttribute("cx", cx);
+      hoverDotErr.setAttribute("cy", cyErr);
+      hoverDotErr.style.display = "block";
+
+      tipUsers.textContent = `👥 MỐC: ${m.users} KHÁCH HÀNG ĐỒNG THỜI`;
+      tipLat.textContent = `⚡ Độ trễ phản hồi: ${m.latency}ms (${m.users > 150 ? 'Cực chậm' : m.users > 80 ? 'Bắt đầu trễ' : 'Nhanh'})`;
+      tipImpact.textContent = `🛒 Ảnh hưởng khách khác: ${m.shoppingImpact}% bị chậm đơn`;
+      tip404.textContent = `⚠️ Dự đoán tỉ lệ lỗi 404: ${m.pred404Rate}% (Rớt kết nối)`;
+
+      let tipX = cx + 14;
+      if (tipX + 255 > width - right) tipX = cx - 265;
+      let tipY = cyLat - 40;
+      if (tipY < top) tipY = top + 4;
+      if (tipY + 88 > height - bottom) tipY = height - bottom - 88;
+
+      tipGroup.setAttribute("transform", `translate(${tipX}, ${tipY})`);
+      tipGroup.style.display = "block";
+
+      if (window.updateConcurrencyBadges) {
+        window.updateConcurrencyBadges(m);
+      }
+    });
+
+    overlay.addEventListener("pointerleave", () => {
+      hoverLine.style.display = "none";
+      hoverDotLat.style.display = "none";
+      hoverDotErr.style.display = "none";
+      tipGroup.style.display = "none";
+      if (liveData && window.updateConcurrencyBadges) {
+        window.updateConcurrencyBadges(calcMetrics(liveData.activeUsers || 0));
+      }
+    });
+
+    svg.append(hoverLine, hoverDotLat, hoverDotErr, tipGroup, overlay);
+    container.replaceChildren(svg);
+  }
+
+  window.DashboardCharts = Object.freeze({ drawSeverity, drawTraffic, drawConcurrency });
 })();
