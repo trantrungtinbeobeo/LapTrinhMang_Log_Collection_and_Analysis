@@ -132,14 +132,33 @@
     document.body.classList.add("modal-open");
     DemoData.recordProductClick(product.id);
     renderClickCount();
+    sendProductInteraction("VIEW_PRODUCT", product);
+  });
+
+  function sendProductInteraction(actionType, prod) {
+    if (!prod) return;
     try {
+      const session = DemoData.getSession();
+      const userName = (session && session.name) ? session.name : "Admin (Localhost)";
       fetch("/api/interaction", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "VIEW_DEVICE", productName: product.name })
-      }).catch(() => {});
+        body: JSON.stringify({
+          type: actionType,
+          productName: prod.name,
+          productId: prod.id,
+          user: userName
+        })
+      })
+      .then(r => r.json())
+      .then(res => {
+        console.log(`[Demo Store] Da gui log "${actionType}" len Server thanh cong:`, res);
+      })
+      .catch(err => {
+        console.warn("[Demo Store] Khong the gui log toi Server:", err);
+      });
     } catch (ignored) {}
-  });
+  }
 
   document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => dialog.close()));
   dialog.addEventListener("click", event => {
