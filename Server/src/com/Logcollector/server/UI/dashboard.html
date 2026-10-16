@@ -149,6 +149,17 @@
             <span class="badge">Anomaly Detector</span>
           </div>
           <div id="security-alerts" class="alerts-list"></div>
+
+          <!-- Danh sach IP bi khoa (Firewall Blacklist) -->
+          <div id="firewall-blacklist-card" class="blacklist-card" hidden style="margin-top: 14px;">
+            <div class="panel-heading" style="margin-bottom: 6px;">
+              <span class="blacklist-title">⛔ Danh sách IP bị Firewall chặn (Drop gói tin):</span>
+              <button id="btn-unblock-all-ips" class="btn btn-tiny" type="button" style="background: #ffffff; border: 1px solid #fca5a5; color: #b91c1c; font-weight: 600;" title="Gỡ bỏ toàn bộ IP khỏi danh sách đen để tiếp tục nhận gói tin">
+                🔓 Bỏ chặn tất cả IP
+              </button>
+            </div>
+            <div id="firewall-blacklist-chips" class="blacklist-chips"></div>
+          </div>
         </article>
       </section>
     </div>
@@ -335,7 +346,10 @@
         </div>
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 10px;">
-        <button class="btn btn-danger btn-small" id="modal-block-ip-btn" type="button" title="Khoá IP này vào Firewall và xóa sạch mọi log độc hại khỏi CSDL">⛔ Chặn IP &amp; Xóa log CSDL</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-danger btn-small" id="modal-block-ip-btn" type="button" title="Khoá IP này vào Firewall và xóa sạch mọi log độc hại khỏi CSDL">⛔ Chặn IP &amp; Xóa log CSDL</button>
+          <button class="btn btn-small" id="modal-unblock-ip-btn" type="button" style="background: #10b981; color: white; border: 1px solid #059669; display: none;" title="Bỏ chặn IP này để tiếp tục nhận gói tin">🔓 Bỏ chặn IP</button>
+        </div>
         <button class="btn btn-primary btn-small" id="modal-ok-btn" type="button">Đóng</button>
       </div>
     </dialog>

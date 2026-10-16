@@ -331,7 +331,7 @@ public class DashboardUI {
         public void handle(HttpExchange exchange) throws IOException {
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-                exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
                 exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
                 exchange.sendResponseHeaders(204, -1);
                 return;
@@ -356,35 +356,86 @@ public class DashboardUI {
                 return;
             }
 
-            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
+            if ("DELETE".equalsIgnoreCase(exchange.getRequestMethod())) {
+                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                String targetIp = null;
+                boolean unblockAll = body.contains("\"all\":true") || body.contains("\"all\": true");
+                java.util.regex.Matcher mIp = java.util.regex.Pattern.compile("\"ip\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+                if (mIp.find()) targetIp = mIp.group(1).trim();
+
+                int count = 0;
+                if (unblockAll) {
+                    count = com.Logcollector.server.ServerMain.unblockAllIps();
+                } else if (targetIp != null && !targetIp.isEmpty()) {
+                    count = com.Logcollector.server.ServerMain.unblockIp(targetIp) ? 1 : 0;
+                }
+
+                String jsonResp = String.format("{\"status\":\"ok\",\"action\":\"unblock\",\"ip\":\"%s\",\"unblocked\":%d}",
+                        (targetIp != null ? targetIp : ""), count);
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                }
                 return;
             }
 
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            String targetIp = null;
-            String reason = "Quan tri vien chan thu cong tu Web Dashboard";
+            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                String targetIp = null;
+                String action = "block";
+                String reason = "Quan tri vien chan thu cong tu Web Dashboard";
 
-            java.util.regex.Matcher mIp = java.util.regex.Pattern.compile("\"ip\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-            if (mIp.find()) targetIp = mIp.group(1).trim();
+                java.util.regex.Matcher mAction = java.util.regex.Pattern.compile("\"action\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+                if (mAction.find()) action = mAction.group(1).trim();
 
-            java.util.regex.Matcher mReason = java.util.regex.Pattern.compile("\"reason\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-            if (mReason.find()) reason = mReason.group(1).trim();
+                java.util.regex.Matcher mIp = java.util.regex.Pattern.compile("\"ip\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+                if (mIp.find()) targetIp = mIp.group(1).trim();
 
-            int purged = 0;
-            if (targetIp != null && !targetIp.isEmpty()) {
-                purged = com.Logcollector.server.ServerMain.blockIp(targetIp, reason);
+                java.util.regex.Matcher mReason = java.util.regex.Pattern.compile("\"reason\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+                if (mReason.find()) reason = mReason.group(1).trim();
+
+                boolean unblockAll = body.contains("\"all\":true") || body.contains("\"all\": true");
+
+                if ("unblock".equalsIgnoreCase(action)) {
+                    int count = 0;
+                    if (unblockAll) {
+                        count = com.Logcollector.server.ServerMain.unblockAllIps();
+                    } else if (targetIp != null && !targetIp.isEmpty()) {
+                        count = com.Logcollector.server.ServerMain.unblockIp(targetIp) ? 1 : 0;
+                    }
+                    String jsonResp = String.format("{\"status\":\"ok\",\"action\":\"unblock\",\"ip\":\"%s\",\"unblocked\":%d}",
+                            (targetIp != null ? targetIp : ""), count);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+                    exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                    byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, bytes.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(bytes);
+                    }
+                    return;
+                }
+
+                int purged = 0;
+                if (targetIp != null && !targetIp.isEmpty()) {
+                    purged = com.Logcollector.server.ServerMain.blockIp(targetIp, reason);
+                }
+
+                String jsonResp = String.format("{\"status\":\"ok\",\"ip\":\"%s\",\"purged\":%d}",
+                        (targetIp != null ? targetIp : ""), purged);
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                }
+                return;
             }
 
-            String jsonResp = String.format("{\"status\":\"ok\",\"ip\":\"%s\",\"purged\":%d}",
-                    (targetIp != null ? targetIp : ""), purged);
-            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-            byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, bytes.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(bytes);
-            }
+            exchange.sendResponseHeaders(405, -1);
         }
     }
 

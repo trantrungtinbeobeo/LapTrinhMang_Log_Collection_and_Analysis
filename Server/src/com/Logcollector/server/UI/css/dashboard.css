@@ -133,6 +133,8 @@
 .blacklist-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .blacklist-chip { display: inline-flex; align-items: center; gap: 6px; background: #fee2e2; border: 1px solid #f87171; color: #b91c1c; padding: 3px 10px; border-radius: 16px; font-family: Consolas, monospace; font-size: 11px; font-weight: 600; }
 .blacklist-chip-purged { background: #ef4444; color: #ffffff; border-radius: 10px; padding: 1px 6px; font-size: 10px; }
+.blacklist-unblock-btn { background: #ffffff; border: 1px solid #10b981; color: #047857; padding: 2px 7px; border-radius: 4px; font-size: 10px; cursor: pointer; font-weight: 700; transition: all 0.15s ease; margin-left: 4px; }
+.blacklist-unblock-btn:hover { background: #10b981; color: #ffffff; }
 
 /* Interactive Traffic Chart Mini Label Tooltip */
 .traffic-tooltip { filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55)); pointer-events: none; }
