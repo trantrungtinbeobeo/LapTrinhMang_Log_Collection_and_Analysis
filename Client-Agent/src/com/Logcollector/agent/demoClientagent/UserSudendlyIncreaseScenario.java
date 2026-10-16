@@ -19,7 +19,7 @@ import java.util.List;
  * 3. Du doan ti le phat sinh loi HTTP 404 / 503 / Timeout khi he thong cham nguong chiu tai.
  * 4. Kiem chung co che luu tru an toan cua AgentLocalQueue khi dut ket noi mang.
  */
-public class LoginOfflineScenario {
+public class UserSudendlyIncreaseScenario {
 
     private static final String HOST = System.getProperty("server.host", "127.0.0.1");
     private static final int TCP_PORT = 9999;
