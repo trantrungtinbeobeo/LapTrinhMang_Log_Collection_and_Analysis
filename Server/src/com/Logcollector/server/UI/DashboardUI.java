@@ -13,7 +13,6 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.Enumeration;
 import java.net.NetworkInterface;
 import java.net.InetAddress;
@@ -265,27 +264,21 @@ public class DashboardUI {
                 // Phat sinh dot luu luong (Burst traffic) mo phong giao dich thuong mai dien tu
                 for (int i = 0; i < burstCount; i++) {
                     int subLat = 15 + (int)(Math.random() * 30);
-                    String subAction = action;
                     String desc;
                     switch (i % 5) {
                         case 0:
-                            subAction = "VIEW_PRODUCT";
                             desc = String.format("User '%s' on Device '%s' viewed '%s' [VIEW_PRODUCT] | Latency: %dms", user, deviceWithUser, item, subLat);
                             break;
                         case 1:
-                            subAction = "INVENTORY_CHECK";
                             desc = String.format("Inventory-Service verified warehouse stock for '%s' [INVENTORY_CHECK] | Latency: %dms", item, subLat);
                             break;
                         case 2:
-                            subAction = "RECOMMENDATION";
                             desc = String.format("Recommendation-Engine fetched related devices for '%s' [RECOMMENDATION] | Latency: %dms", item, subLat);
                             break;
                         case 3:
-                            subAction = "MEDIA_ASSET";
                             desc = String.format("Edge-CDN delivered high-res media for '%s' to '%s' [MEDIA_ASSET] | Latency: %dms", item, device, subLat);
                             break;
                         default:
-                            subAction = "TELEMETRY_PING";
                             desc = String.format("Client Telemetry-Beacon recorded UI interaction for '%s' [TELEMETRY_PING] | Latency: %dms", item, subLat);
                             break;
                     }
