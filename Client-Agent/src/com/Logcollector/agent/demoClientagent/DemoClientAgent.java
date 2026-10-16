@@ -47,19 +47,26 @@ public class DemoClientAgent {
                     CyberAttackScenario.main(new String[]{});
                     break;
                 case "5":
-                    System.out.println("\nChon che do kiem thu Dataset:");
-                    System.out.println("   [1] Phat hien tan cong Brute-force tu hacker that (IP 112.95.230.3)");
-                    System.out.println("   [2] Kiem thu chiu tai da luong (Stress Test 300 log dồn dập)");
-                    System.out.print("👉 Che do: ");
-                    String subChoice = scanner.hasNextLine() ? scanner.nextLine().trim() : "1";
-                    DatasetReplayScenario.main(new String[]{subChoice});
+                    System.out.println("\nChon che do kiem thu Dataset OpenSSH_2k (Tong cong 2,000 log thuc te):");
+                    System.out.println("   [1] Kich ban An ninh: Phat hien tan cong Brute-force tu hacker that (IP 112.95.230.3)");
+                    System.out.println("   [2] Kich ban Chiu tai nhanh: Ban 500 log thuc te da luong qua UDP/TCP");
+                    System.out.println("   [3] Kich ban Toan dien (Full Dataset): Phat lai TOAN BO 2,000 log thuc te tu OpenSSH_2k.log!");
+                    System.out.print("👉 Che do cua ban (1, 2 hoac 3): ");
+                    String subChoice = scanner.hasNextLine() ? scanner.nextLine().trim() : "3";
+                    if ("3".equals(subChoice)) {
+                        DatasetReplayScenario.main(new String[]{"2", "2000"});
+                    } else if ("2".equals(subChoice)) {
+                        DatasetReplayScenario.main(new String[]{"2", "500"});
+                    } else {
+                        DatasetReplayScenario.main(new String[]{"1"});
+                    }
                     break;
                 case "0":
                     System.out.println("Da thoat chuong trinh demo.");
                     break;
                 default:
-                    System.out.println("Dang chay mac dinh Kich ban 5 (Phat lai Dataset OpenSSH that)...");
-                    DatasetReplayScenario.main(new String[]{"1"});
+                    System.out.println("Dang chay mac dinh Kich ban 5 (Phat lai TOAN BO 2,000 log OpenSSH that)...");
+                    DatasetReplayScenario.main(new String[]{"2", "2000"});
                     break;
             }
         }

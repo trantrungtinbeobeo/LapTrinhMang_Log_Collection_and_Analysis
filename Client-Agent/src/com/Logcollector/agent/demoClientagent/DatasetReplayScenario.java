@@ -38,12 +38,22 @@ public class DatasetReplayScenario {
             return;
         }
 
-        String mode = (args.length > 0) ? args[0].toLowerCase() : "1";
+        String mode = (args.length > 0) ? args[0].toLowerCase() : "3";
+        int logCount = 2000;
 
-        if ("2".equals(mode) || "stress".equals(mode)) {
-            runStressTestMode(datasetFile, 300);
-        } else {
+        if (args.length > 1) {
+            try {
+                logCount = Integer.parseInt(args[1]);
+                if (logCount <= 0) logCount = 2000;
+            } catch (NumberFormatException ignored) {}
+        } else if ("2".equals(mode)) {
+            logCount = 500;
+        }
+
+        if ("1".equals(mode) || "security".equals(mode) || "attack".equals(mode)) {
             runSecurityBruteForceMode(datasetFile);
+        } else {
+            runStressTestMode(datasetFile, logCount);
         }
     }
 
@@ -118,11 +128,11 @@ public class DatasetReplayScenario {
         System.out.println("   KICH BAN 5B: KIEM THU CHIU TAI VOI LOG THAT    ");
         System.out.println("==================================================");
         System.out.println("[NGUON DU LIEU] " + datasetFile.getAbsolutePath());
-        System.out.println("[MUC TIEU] Doc " + maxLogs + " dong log that va ban don dap da luong qua UDP/TCP.");
-        System.out.println("[KY VONG] Server tiep nhan on dinh, LogQueue dieu tiet tot, khong bi crash hay rot goi.\n");
+        System.out.println("[MUC TIEU] Phat lai " + (maxLogs >= 2000 ? "TOAN BO 2,000" : maxLogs) + " dong log that da luong qua UDP/TCP.");
+        System.out.println("[KY VONG] Server tiep nhan on dinh, LogQueue va Throughput Wave tang vot tren Dashboard.\n");
 
         List<String> rawLogs = readSampleLines(datasetFile, maxLogs);
-        System.out.println("[DATASET] Da doc " + rawLogs.size() + " dong log thuc te tu file.");
+        System.out.println("[DATASET] Da doc " + rawLogs.size() + " dong log thuc te tu file OpenSSH_2k.log.");
 
         SyslogFormatter formatter = new SyslogFormatter();
         AgentLocalQueue queue = new AgentLocalQueue();
@@ -130,8 +140,8 @@ public class DatasetReplayScenario {
 
         for (int i = 0; i < rawLogs.size(); i++) {
             String raw = rawLogs.get(i);
-            String nodeIp = "192.168.1." + ((i % 120) + 10);
-            String nodeDevice = "Cluster-Node-" + ((i % 10) + 1);
+            String nodeIp = "192.168.1." + ((i % 150) + 10);
+            String nodeDevice = "Cluster-Node-" + ((i % 16) + 1);
             queue.enqueue(new EventGenerator.LogEvent(
                     now,
                     "INFO",
@@ -143,14 +153,15 @@ public class DatasetReplayScenario {
         }
 
         int totalToSend = queue.size();
-        System.out.println("[LOCAL QUEUE] Da nap " + totalToSend + " log vao hang doi cuc bo.");
+        System.out.println("[LOCAL QUEUE] Da nap " + totalToSend + " log vao hang doi AgentLocalQueue.");
         System.out.println("[BAT DAU BAN DON DAP QUA UDP (CONG " + UDP_PORT + ") VA TCP (CONG " + TCP_PORT + ")]...\n");
 
-        ExecutorService pool = Executors.newFixedThreadPool(10);
+        ExecutorService pool = Executors.newFixedThreadPool(12);
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger counter = new AtomicInteger(0);
         long startTime = System.currentTimeMillis();
-        int printStep = Math.max(1, totalToSend / 6);
+        int printStep = Math.max(1, totalToSend / 10);
+        int paceDelay = totalToSend >= 1500 ? 3 : (totalToSend >= 500 ? 6 : 10);
 
         while (!queue.isEmpty()) {
             EventGenerator.LogEvent ev = queue.dequeue();
@@ -168,7 +179,7 @@ public class DatasetReplayScenario {
                     }
                     int current = successCount.incrementAndGet();
                     if (current <= 3 || current % printStep == 0 || current == totalToSend) {
-                        System.out.printf("   [TIEN TRINH %d/%d] Gui qua %s -> IP: %s%n",
+                        System.out.printf("   [TIEN TRINH %4d/%d] Gui qua %-8s -> IP: %s%n",
                                 current, totalToSend, (index % 2 == 0 ? "TCP:9999" : "UDP:514"), ev.getDevice());
                     }
                 } catch (Exception e) {
@@ -176,16 +187,16 @@ public class DatasetReplayScenario {
                 }
             });
 
-            // Gian cach nhe 12ms de mo phong luong truy cap thuc te,
+            // Gian cach nhe de mo phong luong truy cap thuc te,
             // giup bieu do Throughput Wave tren Dashboard bat kip nhip tinh toan va ve song dep mat
             try {
-                Thread.sleep(12);
+                Thread.sleep(paceDelay);
             } catch (InterruptedException ignored) {}
         }
 
         pool.shutdown();
         try {
-            pool.awaitTermination(15, TimeUnit.SECONDS);
+            pool.awaitTermination(30, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -254,9 +265,12 @@ public class DatasetReplayScenario {
         List<String> list = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
-            while ((line = reader.readLine()) != null && list.size() < maxLines) {
+            while ((line = reader.readLine()) != null) {
                 if (!line.trim().isEmpty()) {
                     list.add(line.trim());
+                    if (maxLines > 0 && list.size() >= maxLines) {
+                        break;
+                    }
                 }
             }
         } catch (IOException e) {
