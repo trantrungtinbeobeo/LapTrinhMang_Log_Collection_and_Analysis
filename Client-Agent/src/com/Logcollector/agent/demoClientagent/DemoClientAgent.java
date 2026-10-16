@@ -18,7 +18,7 @@ public class DemoClientAgent {
 
         printBanner();
         System.out.println("Vui long chon kich ban demo ban muon chay (1 - 5):");
-        System.out.println("   [1] Kich ban Dang nhap (Delay 3s test ngat mang & Queue)");
+        System.out.println("   [1] Kich ban Tang truong 200 Nguoi dung (Du bao cham, anh huong mua hang & ti le 404)");
         System.out.println("   [2] Kich ban Nguoi dung chon xem & mua san pham (Web Traffic)");
         System.out.println("   [3] Kich ban Dot bien luu luong (Traffic Spike / Flash Sale)");
         System.out.println("   [4] Kich ban Tan cong an ninh (Brute-force & Port scan alert)");
