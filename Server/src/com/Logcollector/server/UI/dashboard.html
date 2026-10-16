@@ -140,6 +140,57 @@
       </section>
     </div>
 
+    <!-- 03. Phan Tich Tang Truong 200 Nguoi Dung & Du Bao Tac Dong Mua Hang -->
+    <section class="card concurrency-card" aria-labelledby="concurrency-title" style="margin-top: 20px;">
+      <div class="panel-heading">
+        <div>
+          <h2 class="section-label" id="concurrency-title" style="margin: 0; font-size: 16px;">
+            <span>03</span> Tăng Trưởng 200 Khách Hàng Đồng Thời &amp; Dự Báo Tác Động Mua Hàng
+          </h2>
+          <p class="small muted" style="margin: 4px 0 0;">
+            Mô phỏng áp lực khi lượng khách hàng đồng thời tăng từ 1 lên 200 người · Đo lường độ trễ và dự báo tỉ lệ lỗi HTTP 404 / rớt giỏ hàng
+          </p>
+        </div>
+        <span class="badge" id="concurrency-status-badge" style="background: #065f46; color: #34d399; font-weight: 600;">
+          ● Tải ổn định: 1–80 Users
+        </span>
+      </div>
+
+      <div class="concurrency-metrics-row">
+        <div class="concurrency-metric-box">
+          <span class="metric-mini-label">Khách hàng đồng thời</span>
+          <strong id="sim-active-users">0 <small style="font-size: 13px; font-weight: normal; color: #94a3b8;">/ 200 người</small></strong>
+          <span class="metric-mini-sub" id="sim-user-desc">Sẵn sàng nhận luồng Kịch bản 1</span>
+        </div>
+        <div class="concurrency-metric-box">
+          <span class="metric-mini-label">Độ trễ phản hồi (Latency)</span>
+          <strong id="sim-latency">18 <small style="font-size: 13px; font-weight: normal; color: #94a3b8;">ms</small></strong>
+          <span class="metric-mini-sub" id="sim-latency-desc">Phản hồi tức thì (&lt;50ms)</span>
+        </div>
+        <div class="concurrency-metric-box">
+          <span class="metric-mini-label">Ảnh hưởng mua hàng của khách khác</span>
+          <strong id="sim-shopping-impact">0.0<small style="font-size: 13px; font-weight: normal; color: #94a3b8;">%</small></strong>
+          <span class="metric-mini-sub" id="sim-impact-desc">Trải nghiệm mua hàng mượt mà</span>
+        </div>
+        <div class="concurrency-metric-box metric-alert-box">
+          <span class="metric-mini-label">Dự đoán tỉ lệ lỗi 404 / Timeout</span>
+          <strong id="sim-error-rate" style="color: #f87171;">0.0<small style="font-size: 13px; font-weight: normal; color: #94a3b8;">%</small></strong>
+          <span class="metric-mini-sub" id="sim-error-desc">Không phát hiện rớt phiên</span>
+        </div>
+      </div>
+
+      <div class="concurrency-chart-container">
+        <div id="concurrency-chart" class="concurrency-chart"></div>
+      </div>
+
+      <div class="concurrency-legend-bar">
+        <span><span class="legend-dot" style="background: #3b82f6;"></span> Vùng an toàn (&le; 80 users)</span>
+        <span><span class="legend-dot" style="background: #f59e0b;"></span> Vùng cảnh báo chậm (81–150 users)</span>
+        <span><span class="legend-dot" style="background: #ef4444;"></span> Vùng nghẽn tải / Lỗi 404 (&gt; 150 users)</span>
+        <span style="margin-left: auto; color: #94a3b8; font-size: 12px;">👉 Lia chuột trên biểu đồ để xem dự đoán tại từng mốc người dùng</span>
+      </div>
+    </section>
+
     <!-- Bang Raw Syslog Stream thoi gian thuc (Terminal Console) -->
     <section class="raw-terminal-card" aria-label="Khung dòng lệnh log thô thời gian thực">
       <div class="raw-terminal-header">
