@@ -134,5 +134,13 @@
 .blacklist-chip { display: inline-flex; align-items: center; gap: 6px; background: #fee2e2; border: 1px solid #f87171; color: #b91c1c; padding: 3px 10px; border-radius: 16px; font-family: Consolas, monospace; font-size: 11px; font-weight: 600; }
 .blacklist-chip-purged { background: #ef4444; color: #ffffff; border-radius: 10px; padding: 1px 6px; font-size: 10px; }
 
+/* Interactive Traffic Chart Tooltip */
+.traffic-tooltip { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45)); }
+.traffic-tooltip text { font-family: "Cascadia Code", Consolas, -apple-system, sans-serif; }
+.traffic-tooltip-time { font-size: 10px; }
+.traffic-tooltip-rate { font-size: 11.5px; }
+.traffic-tooltip-status { font-size: 10px; }
+.traffic-tooltip-stream { font-size: 9.5px; }
+
 @media (max-width: 1000px) { .dashboard-grid-2col { grid-template-columns: minmax(0, 1fr); } }
 

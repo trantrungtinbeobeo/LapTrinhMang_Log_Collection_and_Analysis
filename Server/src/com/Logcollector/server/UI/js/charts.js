@@ -73,6 +73,116 @@
       svg.append(svgElement("text", { x: x(index), y: height - 12, "text-anchor": tick === 0 ? "start" : tick === 5 ? "end" : "middle", class: "chart-axis" }, tick === 5 ? "Hiện tại" : `−${5 - tick} phút`));
     });
     if (!snapshot.total) svg.append(svgElement("text", { x: width / 2, y: height / 2, "text-anchor": "middle", class: "chart-axis" }, "Chưa có log trong 5 phút gần nhất"));
+
+    // Cac thanh phan tuong tac khi re chuot (Hover Tooltip & Spike Indicator)
+    const cursorLine = svgElement("line", {
+      x1: left, y1: top, x2: left, y2: top + plotHeight,
+      stroke: "#60a5fa", "stroke-width": "1.5", "stroke-dasharray": "3,3",
+      style: "display: none; pointer-events: none;"
+    });
+
+    const cursorDot = svgElement("circle", {
+      cx: left, cy: top, r: "5.5", stroke: "#ffffff", "stroke-width": "2", fill: "#2563eb",
+      style: "display: none; pointer-events: none;"
+    });
+
+    const tooltipGroup = svgElement("g", { class: "traffic-tooltip", style: "display: none; pointer-events: none;" });
+    const tooltipBg = svgElement("rect", {
+      class: "traffic-tooltip-bg", width: "185", height: "76", rx: "8",
+      fill: "#0f172a", "fill-opacity": "0.96", stroke: "#334155", "stroke-width": "1"
+    });
+    const timeText = svgElement("text", { class: "traffic-tooltip-time", x: "10", y: "18", fill: "#94a3b8" });
+    const rateText = svgElement("text", { class: "traffic-tooltip-rate", x: "10", y: "36", fill: "#38bdf8", "font-weight": "700" });
+    const statusText = svgElement("text", { class: "traffic-tooltip-status", x: "10", y: "53", fill: "#4ade80", "font-weight": "600" });
+    const streamText = svgElement("text", { class: "traffic-tooltip-stream", x: "10", y: "69", fill: "#cbd5e1" });
+
+    tooltipGroup.append(tooltipBg, timeText, rateText, statusText, streamText);
+
+    // Vung bat su kien chuot (Transparent Overlay)
+    const overlay = svgElement("rect", {
+      x: left, y: top, width: plotWidth, height: plotHeight,
+      fill: "transparent", style: "cursor: crosshair; pointer-events: all;"
+    });
+
+    function getStreamDetails(secIndex) {
+      const secStart = snapshot.start + secIndex * 1000;
+      const secEnd = secStart + 1000;
+      const matchingLogs = (snapshot.logs || []).filter(l => l.at >= secStart && l.at < secEnd);
+      const ipCounts = {};
+      const catCounts = {};
+      matchingLogs.forEach(l => {
+        const ip = l.ip || "127.0.0.1";
+        ipCounts[ip] = (ipCounts[ip] || 0) + 1;
+        const cat = l.category || l.type || "TRAFFIC";
+        catCounts[cat] = (catCounts[cat] || 0) + 1;
+      });
+      let topIp = "127.0.0.1", maxIpCount = 0;
+      Object.entries(ipCounts).forEach(([ip, cnt]) => {
+        if (cnt > maxIpCount) { maxIpCount = cnt; topIp = ip; }
+      });
+      let topCat = "Lưu lượng chuẩn", maxCatCount = 0;
+      Object.entries(catCounts).forEach(([cat, cnt]) => {
+        if (cnt > maxCatCount) { maxCatCount = cnt; topCat = cat; }
+      });
+      return { topIp, maxIpCount, topCat, count: matchingLogs.length };
+    }
+
+    overlay.addEventListener("pointermove", (e) => {
+      const rect = overlay.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const clampedX = Math.max(0, Math.min(plotWidth, mouseX));
+      const index = Math.round((clampedX / plotWidth) * 299);
+      const rate = snapshot.rates[index] || 0;
+      const cx = x(index);
+      const cy = y(rate);
+      const isSpike = rate >= 15 || (rate >= 8 && rate > snapshot.average * 2.2);
+
+      cursorLine.setAttribute("x1", cx);
+      cursorLine.setAttribute("x2", cx);
+      cursorLine.style.display = "block";
+
+      cursorDot.setAttribute("cx", cx);
+      cursorDot.setAttribute("cy", cy);
+      cursorDot.setAttribute("fill", isSpike ? "#dc2626" : "#2563eb");
+      cursorDot.style.display = "block";
+
+      const stream = getStreamDetails(index);
+      const atTime = new Date(snapshot.start + index * 1000);
+      const diffSec = Math.max(0, Math.round((snapshot.end - atTime.getTime()) / 1000));
+      const minAgo = (diffSec / 60).toFixed(1);
+
+      timeText.textContent = `⏱️ ${time.format(atTime)} (−${minAgo} phút)`;
+      rateText.textContent = `📈 ${rate} log/giây ${isSpike ? "⚡ [ĐỘT BIẾN]" : ""}`;
+      rateText.setAttribute("fill", isSpike ? "#f87171" : "#38bdf8");
+
+      statusText.textContent = isSpike
+        ? `⚠️ ĐỘT BIẾN: ${stream.topCat}`
+        : `● Trạng thái luồng: Ổn định`;
+      statusText.setAttribute("fill", isSpike ? "#fbbf24" : "#4ade80");
+
+      streamText.textContent = stream.count > 0
+        ? `🌐 Luồng IP: ${stream.topIp} (${stream.maxIpCount} log)`
+        : `🌐 Luồng định kỳ hệ thống`;
+
+      let tooltipX = cx + 12;
+      if (tooltipX + 190 > width - right) {
+        tooltipX = cx - 198;
+      }
+      let tooltipY = cy - 42;
+      if (tooltipY < top) tooltipY = top + 4;
+      if (tooltipY + 76 > height - bottom) tooltipY = height - bottom - 76;
+
+      tooltipGroup.setAttribute("transform", `translate(${tooltipX}, ${tooltipY})`);
+      tooltipGroup.style.display = "block";
+    });
+
+    overlay.addEventListener("pointerleave", () => {
+      cursorLine.style.display = "none";
+      cursorDot.style.display = "none";
+      tooltipGroup.style.display = "none";
+    });
+
+    svg.append(cursorLine, cursorDot, tooltipGroup, overlay);
     container.replaceChildren(svg);
   }
 
