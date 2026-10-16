@@ -22,6 +22,28 @@ public class ServerMain {
     private static final int HTTP_PORT = 8080;
     private static final Pattern SSH_IP_PATTERN = Pattern.compile("(?:from|rhost=|\\[)\\s*([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
 
+    public static final java.util.Set<String> BLOCKED_IPS = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private static WebSocketServer globalWsServer;
+
+    public static int blockIp(String ip, String reason) {
+        if (ip == null || ip.trim().isEmpty() || "127.0.0.1".equals(ip.trim())) return 0;
+        String cleanIp = ip.trim();
+        BLOCKED_IPS.add(cleanIp);
+        System.err.println("\n[FIREWALL BLACKLIST] DA KHOA IP: " + cleanIp + " | Ly do: " + reason);
+        int purged = com.Logcollector.server.Storage.DatabaseManager.purgeLogsByIp(cleanIp);
+        if (globalWsServer != null) {
+            String blockJson = String.format(
+                "{\"type\":\"IP_BLOCKED\",\"ip\":\"%s\",\"reason\":\"%s\",\"purged\":%d,\"timestamp\":\"%s\"}",
+                escapeJson(cleanIp),
+                escapeJson(reason),
+                purged,
+                Instant.now().toString()
+            );
+            globalWsServer.broadcast(blockJson);
+        }
+        return purged;
+    }
+
     public static void main(String[] args) {
         System.out.println("==================================================");
         System.out.println("   KHOI DONG SERVER TIEP NHAN & PHAN TICH LOG     ");
@@ -35,6 +57,7 @@ public class ServerMain {
 
             System.out.println("[WEBSOCKET] Dang khoi dong WebSocket Server tai cong " + WS_PORT + "...");
             WebSocketServer wsServer = new WebSocketServer(WS_PORT);
+            globalWsServer = wsServer;
             wsServer.start();
 
             // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va Bo tong hop bieu do (ChartManager)
@@ -50,6 +73,11 @@ public class ServerMain {
                     Instant.now().toString()
                 );
                 wsServer.broadcast(alertJson);
+
+                // Tu dong chan IP neu dat cap do CRITICAL (Brute-force hoac Port Scan)
+                if (alertType != null && alertType.startsWith("CRITICAL")) {
+                    blockIp(sourceIp, "Tu dong khoa do dat nguong nguy hiem CRITICAL");
+                }
             });
 
             // 3. Luong tieu thu log tu LogQueue, boc tach qua LogParser, thong ke va phan tich
@@ -68,6 +96,12 @@ public class ServerMain {
 
                         if (event != null) {
                             String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
+
+                            // Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
+                            if (BLOCKED_IPS.contains(effectiveIp)) {
+                                System.out.println("[FIREWALL DROP] Tu choi goi tin tu IP da bi khoa: " + effectiveIp);
+                                continue;
+                            }
 
                             // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
                             chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
