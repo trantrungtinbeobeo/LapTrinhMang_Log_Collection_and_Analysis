@@ -35,7 +35,7 @@ public class DemoClientAgent {
 
             switch (choice) {
                 case "1":
-                    LoginOfflineScenario.main(new String[]{});
+                    UserSudendlyIncreaseScenario.main(new String[]{});
                     break;
                 case "2":
                     ProductClickScenario.main(new String[]{});
@@ -69,8 +69,10 @@ public class DemoClientAgent {
         String arg = args[0].toLowerCase();
         switch (arg) {
             case "1":
+            case "users":
+            case "usersuddenly":
             case "login":
-                LoginOfflineScenario.main(args);
+                UserSudendlyIncreaseScenario.main(args);
                 break;
             case "2":
             case "product":

@@ -66,135 +66,140 @@ public class UserSudendlyIncreaseScenario {
             "Laptop Gaming Titan X15"
         };
 
-        List<EventGenerator.LogEvent> events = new ArrayList<>();
-
-        for (int i = 1; i <= targetUsers; i++) {
-            String now = Instant.now().toString();
-            String ip = "192.168.1." + ((i % 150) + 1);
-            String uName = users[i % users.length] + "_" + (1000 + i);
-            String devName = devices[i % devices.length];
-            String prod = products[i % products.length];
-
-            // 1. Tinh toan do tre thuc te theo luong nguoi tang dan
-            int latency;
-            double shoppingImpact; // Phan tram anh huong cham toi khach hang khac (%)
-            double pred404Rate;     // Du bao ti le loi 404 / Timeout (%)
-            String severity;
-            String action;
-
-            if (i <= 80) {
-                // Vung an toan
-                latency = 18 + (int) (i * 0.9);
-                shoppingImpact = (i / 80.0) * 8.0;
-                pred404Rate = 0.05 + (i / 80.0) * 0.45;
-                severity = "INFO";
-                action = (i % 5 == 0) ? "ADD_TO_CART" : "LOGIN_AND_VIEW";
-            } else if (i <= 150) {
-                // Vung bat dau cham & anh huong
-                int extra = i - 80;
-                latency = 90 + (int) (Math.pow(extra, 1.45) * 2.2);
-                shoppingImpact = 10.0 + (extra / 70.0) * 50.0;
-                pred404Rate = 1.0 + (extra / 70.0) * 12.0;
-                severity = "WARNING";
-                action = (i % 8 == 0) ? "CART_DELAYED" : "PAGE_SLOW_RESPONSE";
-            } else {
-                // Vung nghen tai nghiem trong (151 - 200)
-                int extra = i - 150;
-                latency = 450 + (int) (Math.pow(extra, 1.6) * 7.5);
-                shoppingImpact = 65.0 + (extra / 50.0) * 30.0;
-                pred404Rate = 15.0 + (extra / 50.0) * 20.0;
-                severity = "CRITICAL";
-                action = (i % 6 == 0) ? "HTTP_404_PAGE_NOT_FOUND" : (i % 4 == 0 ? "CHECKOUT_TIMEOUT" : "SERVER_BUSY_503");
+        class WaveConfig {
+            final int startU, endU, burstDelayMs, pauseAfterMs;
+            final String name, phaseDesc, archDiag;
+            WaveConfig(int startU, int endU, int burstDelayMs, int pauseAfterMs, String name, String phaseDesc, String archDiag) {
+                this.startU = startU; this.endU = endU;
+                this.burstDelayMs = burstDelayMs; this.pauseAfterMs = pauseAfterMs;
+                this.name = name; this.phaseDesc = phaseDesc; this.archDiag = archDiag;
             }
-
-            String devWithUser = devName + " [User: " + uName + "]";
-            String logMsg = String.format(
-                "ActiveUsers: %d/%d | Latency: %dms | ShoppingImpact: %.1f%% | Pred404: %.1f%% | Action: '%s' | Product: '%s' | IP: %s",
-                i, targetUsers, latency, shoppingImpact, pred404Rate, action, prod, ip
-            );
-
-            events.add(new EventGenerator.LogEvent(now, severity, action, logMsg, devWithUser, "NETWORK"));
         }
 
-        // 2. Nap vao hang doi cuc bo
-        AgentLocalQueue queue = new AgentLocalQueue();
-        for (EventGenerator.LogEvent ev : events) {
-            queue.enqueue(ev);
-        }
-        System.out.println("[LOCAL QUEUE] Da nap thanh cong " + queue.size() + " ban ghi luu luong vao hang doi cuc bo.");
-        System.out.println("[BAT DAU TRUYEN TAI DULIEU VA THEO DOI TREN DASHBOARD]...\n");
+        List<WaveConfig> waves = new ArrayList<>();
+        waves.add(new WaveConfig(1, 20, 20, 350, "ĐỢT 1: LƯU LƯỢNG NỀN TĂNG DẦN", "Khách hàng duyệt web ban đầu (1 -> 20 Users)", "Hạ tầng UDP 514 & TCP 9999 xử lý mượt mà, độ trễ tối ưu <35ms"));
+        waves.add(new WaveConfig(21, 45, 12, 400, "ĐỢT 2: ĐỘT BIẾN +25 USERS", "Flash Sale mở bán điện thoại & laptop (21 -> 45 Users)", "Lưu lượng nhận tăng nhanh, LogQueue đệm tốt, chưa có độ trễ"));
+        waves.add(new WaveConfig(46, 75, 10, 450, "ĐỢT 3: ĐỘT BIẾN +30 USERS", "Thông báo khuyến mãi gửi đến thiết bị (46 -> 75 Users)", "Hệ thống tiệm cận ngưỡng 80 users, bắt đầu nhích độ trễ nhẹ"));
+        waves.add(new WaveConfig(76, 105, 10, 500, "ĐỢT 4: ĐỘT BIẾN +30 USERS (VƯỢT NGƯỠNG)", "Vượt ngưỡng an toàn 80 users (76 -> 105 Users)", "LogQueue bắt đầu dồn hàng đợi, luồng SQLite Disk I/O tăng thời gian ghi nhận"));
+        waves.add(new WaveConfig(106, 135, 10, 500, "ĐỢT 5: ĐỘT BIẾN +30 USERS (BẮT ĐẦU CHẬM)", "Giỏ hàng & kiểm tra thanh toán bị trễ (106 -> 135 Users)", "Độ trễ chạm 450ms, 55% khách hàng khác cảm thấy web xoay vòng"));
+        waves.add(new WaveConfig(136, 165, 8, 550, "ĐỢT 6: ĐỘT BIẾN +30 USERS (NGHẼN TẢI NẶNG)", "Cảnh báo nghẽn tải nghiêm trọng (136 -> 165 Users)", "Độ trễ vượt 750ms, bắt đầu xuất hiện lỗi rớt gói tin và HTTP 404"));
+        waves.add(new WaveConfig(166, 200, 8, 300, "ĐỢT 7: ĐỘT BIẾN +35 USERS (QUÁ TẢI ĐỈNH)", "Quá tải đỉnh điểm 200 Users đồng thời (166 -> 200 Users)", "Luồng consumer quá tải, 35% lượt truy cập gặp lỗi 404 / 503, 95% khách hàng bị chậm"));
 
         SyslogFormatter formatter = new SyslogFormatter();
         TCPSender tcpSender = new TCPSender(HOST, TCP_PORT);
         UDPSender udpSender = new UDPSender(HOST, UDP_PORT);
+        AgentLocalQueue queue = new AgentLocalQueue();
 
         long startTime = System.currentTimeMillis();
         int sentSuccess = 0;
-        int logIndex = 1;
+        int totalProcessed = 0;
 
-        while (!queue.isEmpty()) {
-            EventGenerator.LogEvent ev = queue.peek();
-            if (ev == null) break;
+        for (WaveConfig w : waves) {
+            int waveCount = w.endU - w.startU + 1;
+            int midU = w.endU;
+            int curLatency = (midU <= 80) ? (18 + (int)(midU * 0.9)) : (midU <= 150 ? (90 + (int)(Math.pow(midU - 80, 1.45) * 2.2)) : (450 + (int)(Math.pow(midU - 150, 1.6) * 7.5)));
+            double curImpact = (midU <= 80) ? ((midU / 80.0) * 8.0) : (midU <= 150 ? (10.0 + ((midU - 80) / 70.0) * 50.0) : (65.0 + ((midU - 150) / 50.0) * 30.0));
+            double cur404 = (midU <= 80) ? (0.05 + (midU / 80.0) * 0.45) : (midU <= 150 ? (1.0 + ((midU - 80) / 70.0) * 12.0) : (15.0 + ((midU - 150) / 50.0) * 20.0));
 
-            boolean useTcp = "CRITICAL".equalsIgnoreCase(ev.getSeverity())
-                    || "ERROR".equalsIgnoreCase(ev.getSeverity());
+            System.out.println("======================================================================");
+            System.out.printf("🌊 [%s | TĂNG VỌT +%d USERS] %s%n", w.name, waveCount, w.phaseDesc);
+            System.out.printf("   • Khách hàng đồng thời: %d -> %d Users%n", w.startU, w.endU);
+            System.out.printf("   • Chẩn đoán kiến trúc : %s%n", w.archDiag);
+            System.out.printf("   • Dự báo hệ thống     : Độ trễ %dms | Ảnh hưởng: %.1f%% | Dự đoán lỗi 404: %.1f%%%n", curLatency, curImpact, cur404);
+            System.out.println("----------------------------------------------------------------------");
 
-            try {
-                String payload = formatter.format(ev);
-                if (useTcp) {
-                    tcpSender.send(payload);
+            for (int u = w.startU; u <= w.endU; u++) {
+                totalProcessed++;
+                String now = Instant.now().toString();
+                String ip = "192.168.1." + ((u % 150) + 1);
+                String uName = users[u % users.length] + "_" + (1000 + u);
+                String devName = devices[u % devices.length];
+                String prod = products[u % products.length];
+
+                int latency;
+                double shoppingImpact;
+                double pred404Rate;
+                String severity;
+                String action;
+
+                if (u <= 80) {
+                    latency = 18 + (int) (u * 0.9);
+                    shoppingImpact = (u / 80.0) * 8.0;
+                    pred404Rate = 0.05 + (u / 80.0) * 0.45;
+                    severity = "INFO";
+                    action = (u % 5 == 0) ? "ADD_TO_CART" : "LOGIN_AND_VIEW";
+                } else if (u <= 150) {
+                    int extra = u - 80;
+                    latency = 90 + (int) (Math.pow(extra, 1.45) * 2.2);
+                    shoppingImpact = 10.0 + (extra / 70.0) * 50.0;
+                    pred404Rate = 1.0 + (extra / 70.0) * 12.0;
+                    severity = "WARNING";
+                    action = (u % 8 == 0) ? "CART_DELAYED" : "PAGE_SLOW_RESPONSE";
                 } else {
-                    udpSender.send(payload);
+                    int extra = u - 150;
+                    latency = 450 + (int) (Math.pow(extra, 1.6) * 7.5);
+                    shoppingImpact = 65.0 + (extra / 50.0) * 30.0;
+                    pred404Rate = 15.0 + (extra / 50.0) * 20.0;
+                    severity = "CRITICAL";
+                    action = (u % 6 == 0) ? "HTTP_404_PAGE_NOT_FOUND" : (u % 4 == 0 ? "CHECKOUT_TIMEOUT" : "SERVER_BUSY_503");
                 }
 
-                queue.dequeue();
-                sentSuccess++;
+                String devWithUser = devName + " [User: " + uName + "]";
+                String logMsg = String.format(
+                    "ActiveUsers: %d/%d | Latency: %dms | ShoppingImpact: %.1f%% | Pred404: %.1f%% | Action: '%s' | Product: '%s' | IP: %s",
+                    u, targetUsers, latency, shoppingImpact, pred404Rate, action, prod, ip
+                );
 
-                // In tien trinh truc quan moi 25 nguoi va moc 50, 100, 150, 200
-                if (logIndex == 1 || logIndex % 25 == 0 || logIndex == targetUsers) {
-                    int curUsers = logIndex;
-                    int curLatency = (curUsers <= 80) ? (18 + (int)(curUsers * 0.9)) : (curUsers <= 150 ? (90 + (int)(Math.pow(curUsers - 80, 1.45) * 2.2)) : (450 + (int)(Math.pow(curUsers - 150, 1.6) * 7.5)));
-                    double curImpact = (curUsers <= 80) ? ((curUsers / 80.0) * 8.0) : (curUsers <= 150 ? (10.0 + ((curUsers - 80) / 70.0) * 50.0) : (65.0 + ((curUsers - 150) / 50.0) * 30.0));
-                    double cur404 = (curUsers <= 80) ? (0.05 + (curUsers / 80.0) * 0.45) : (curUsers <= 150 ? (1.0 + ((curUsers - 80) / 70.0) * 12.0) : (15.0 + ((curUsers - 150) / 50.0) * 20.0));
+                EventGenerator.LogEvent ev = new EventGenerator.LogEvent(now, severity, action, logMsg, devWithUser, "NETWORK");
+                queue.enqueue(ev);
 
-                    System.out.printf(
-                        "👉 [TIEN TRINH %3d/%3d USERS] %-4s | Do tre: %4dms | Anh huong khach khac: %5.1f%% | Du doan loi 404: %4.1f%%%n",
-                        curUsers, targetUsers, (useTcp ? "TCP" : "UDP"), curLatency, curImpact, cur404
-                    );
-                }
-
-                // Do tre nhe 15ms giua cac log de Windows khong nghen port va bieu do Dashboard hien thi song nuot na
+                boolean useTcp = "CRITICAL".equalsIgnoreCase(severity) || "ERROR".equalsIgnoreCase(severity);
                 try {
-                    Thread.sleep(15);
-                } catch (InterruptedException ignored) {}
-
-            } catch (IOException e) {
-                System.err.println("[LOI TRUYEN TAI #" + logIndex + "]: " + e.getMessage());
-                if (e instanceof java.net.ConnectException) {
-                    System.err.println("   -> [CHU Y]: Khong the ket noi toi ServerMain!");
-                    System.err.println("   -> Log chua gui duoc duoc giu an toan trong AgentLocalQueue (" + queue.size() + " log).");
+                    String payload = formatter.format(ev);
+                    if (useTcp) {
+                        tcpSender.send(payload);
+                    } else {
+                        udpSender.send(payload);
+                    }
+                    queue.dequeue();
+                    sentSuccess++;
+                } catch (IOException e) {
+                    System.err.println("   [!] Lỗi gửi log user " + u + ": " + e.getMessage());
                 }
-                break;
+
+                try {
+                    Thread.sleep(w.burstDelayMs);
+                } catch (InterruptedException ignored) {}
             }
-            logIndex++;
+
+            System.out.printf("   ✓ Hoàn tất đợt sóng: Đã truyền %d/%d log thành công. Đang giữ nhịp để biểu đồ Dashboard hiển thị đỉnh sóng...%n%n", sentSuccess, totalProcessed);
+            try {
+                Thread.sleep(w.pauseAfterMs);
+            } catch (InterruptedException ignored) {}
         }
 
         long duration = Math.max(1, System.currentTimeMillis() - startTime);
 
-        System.out.println("\n======================================================================");
-        System.out.println("   TONG KET KICH BAN 1: TANG TRUONG 200 USERS & DU BAO HIEN TRANG    ");
         System.out.println("======================================================================");
-        System.out.println("   • So luong khach hang dong thoi mo phong : " + targetUsers + " nguoi");
-        System.out.println("   • So luot gui thanh cong ve ServerMain   : " + sentSuccess + "/" + targetUsers);
-        System.out.println("   • Thoi gian thuc hien mo phong           : " + duration + " ms");
+        System.out.println("   TỔNG KẾT KỊCH BẢN: TĂNG TRƯỞNG ĐỘT BIẾN & CHẨN ĐOÁN KIẾN TRÚC      ");
+        System.out.println("======================================================================");
+        System.out.println("   • Tổng số khách hàng đồng thời đạt đỉnh  : " + targetUsers + " người");
+        System.out.println("   • Tổng số gói tin truyền thành công      : " + sentSuccess + "/" + targetUsers);
+        System.out.println("   • Thời gian thực hiện kiểm thử mô phỏng  : " + duration + " ms");
         System.out.println("   ------------------------------------------------------------------");
-        System.out.println("   [KET LUAN DU BAO ANH HUONG KINH DOANH & NGHEN TAI]:");
-        System.out.println("   1. Kha nang gay cham: KHI DAT 150-200 NGUOI, do tre tang tu 18ms -> 1150ms+.");
-        System.out.println("      -> 85% - 95% khach hang khac se cam thay web bi xoay vong, cham ro ret!");
-        System.out.println("   2. Anh huong viec mua hang: Giỏ hàng bi delay, thanh toan gap timeout, ti le bo gio hang cao.");
-        System.out.println("   3. Du doan ti le loi 404/Timeout: Uoc tinh 25% - 35% luot truy cap gap loi khi cham nguong 200 nguoi");
-        System.out.println("      neu he thong khong co bo dem Queue hoac Scale tai nguyen.");
-        System.out.println("   4. Bao toan du lieu: " + queue.size() + " log con sot trong Local Queue neu ngat Server.");
+        System.out.println("   [CHẨN ĐOÁN & DỰ BÁO TÁC ĐỘNG MUA HÀNG DỰA TRÊN KIẾN TRÚC TOÀN BỘ FILE]:");
+        System.out.println("   1. Giai đoạn 1 - 80 Users (Vùng An Toàn - UDP/TCP thông suốt):");
+        System.out.println("      - Độ trễ tối ưu 18 - 85ms. LogQueue và SQLite xử lý tức thời.");
+        System.out.println("      - Tỷ lệ lỗi 404 < 0.5%, ảnh hưởng mua hàng < 8%.");
+        System.out.println("   2. Giai đoạn 81 - 150 Users (Vùng Chậm & Dồn hàng đợi):");
+        System.out.println("      - Độ trễ tăng vọt 90 -> 450ms do LogQueue bắt đầu tích lũy.");
+        System.out.println("      - 50% - 60% khách hàng khác bắt đầu thấy giỏ hàng quay vòng, chậm trễ.");
+        System.out.println("      - Tỷ lệ lỗi 404 / Timeout tăng lên 1% - 12%.");
+        System.out.println("   3. Giai đoạn 151 - 200 Users (Vùng Quá Tải & Nguy cơ Rớt đơn):");
+        System.out.println("      - Độ trễ đạt đỉnh 600 - 1200ms+. Luồng xử lý đơn consumer bị nghẽn.");
+        System.out.println("      - 95% khách hàng bị ảnh hưởng nghiêm trọng đến việc thanh toán.");
+        System.out.println("      - Tỷ lệ lỗi HTTP 404 / 503 / Timeout chạm ngưỡng 35%.");
+        System.out.println("   4. Bảo toàn tính toàn vẹn: Dữ liệu chưa gửi được lưu đệm trong AgentLocalQueue.");
         System.out.println("======================================================================");
     }
 }
