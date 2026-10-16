@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 public class LogParser {
 
     // 1. REGEX: Cấu trúc bóc tách chuẩn Syslog (Có chứa PRI, Timestamp, IP và Nội dung)
-    private static final String SYSLOG_REGEX = "^<(\\d{1,3})>(?:(\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}|[A-Za-z]{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}))?\\s+([0-9a-zA-Z.:-]+)\\s+(.*)$";
+    private static final String SYSLOG_REGEX = "^<(\\d{1,3})>(?:1\\s+)?(?:(\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?|[A-Za-z]{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}))?\\s+([0-9a-zA-Z.:_-]+)\\s+(.*)$";
     private static final Pattern PATTERN = Pattern.compile(SYSLOG_REGEX);
 
     // Mảng dùng để chuẩn hóa Severity Level (Từ mã số sang tên gọi)
@@ -53,6 +53,9 @@ public class LogParser {
 
             if (token.matches("^[0-9]{1,3}(?:\\.[0-9]{1,3}){3}$")) {
                 ip = token;
+                device = extractDevice(message, null);
+            } else if ("0:0:0:0:0:0:0:1".equals(token) || "::1".equals(token) || "localhost".equalsIgnoreCase(token)) {
+                ip = "127.0.0.1";
                 device = extractDevice(message, null);
             } else {
                 device = token.replace("_", " ");

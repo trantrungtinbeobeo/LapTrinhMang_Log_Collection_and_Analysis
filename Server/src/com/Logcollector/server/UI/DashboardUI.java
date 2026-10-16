@@ -179,6 +179,9 @@ public class DashboardUI {
             }
 
             String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+            if (clientIp == null || "0:0:0:0:0:0:0:1".equals(clientIp) || "::1".equals(clientIp)) {
+                clientIp = "127.0.0.1";
+            }
             String userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
             String device = parseDeviceFromUserAgent(userAgent);
 
@@ -193,14 +196,15 @@ public class DashboardUI {
 
             int pri = success ? 14 : 12; // 14: INFO, 12: WARNING
             String eventType = success ? "LOGIN_SUCCESS" : "LOGIN_FAILED";
-            String now = Instant.now().toString();
+            String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            String syslogMsg = String.format("<%d>1 %s %s LogCollector-Web - %s - Device '%s' [IP: %s] %s user '%s'",
-                    pri, now, device.replaceAll("[^a-zA-Z0-9.-]", "_"), eventType, device, clientIp,
+            String syslogMsg = String.format("<%d>%s %s %s - Device '%s' [IP: %s] %s user '%s'",
+                    pri, timestamp, clientIp, eventType, device, clientIp,
                     (success ? "logged in successfully as" : "failed password for"), email);
 
             // Day vao hang doi log cua he thong
             LogQueue.offer(syslogMsg);
+            System.out.println("[AUTH API] Da ghi nhan dang nhap tu " + clientIp + ": " + email + " (" + eventType + ")");
 
             String jsonResp = String.format("{\"status\":\"ok\",\"device\":\"%s\",\"ip\":\"%s\"}", device, clientIp);
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
@@ -228,24 +232,32 @@ public class DashboardUI {
             }
 
             String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+            if (clientIp == null || "0:0:0:0:0:0:0:1".equals(clientIp) || "::1".equals(clientIp)) {
+                clientIp = "127.0.0.1";
+            }
             String userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
             String device = parseDeviceFromUserAgent(userAgent);
 
             String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             String action = "VIEW_PRODUCT";
             String item = "San pham dien tu";
+            String user = "Admin (Localhost)";
+
             java.util.regex.Matcher mAction = java.util.regex.Pattern.compile("\"type\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
             if (mAction.find()) action = mAction.group(1);
             java.util.regex.Matcher mItem = java.util.regex.Pattern.compile("\"productName\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
             if (mItem.find()) item = mItem.group(1);
+            java.util.regex.Matcher mUser = java.util.regex.Pattern.compile("\"user\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+            if (mUser.find()) user = mUser.group(1);
 
             int pri = 14;
-            String now = Instant.now().toString();
+            String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            String syslogMsg = String.format("<%d>1 %s %s LogCollector-Web - %s - Device '%s' [IP: %s] viewed product '%s'",
-                    pri, now, device.replaceAll("[^a-zA-Z0-9.-]", "_"), action, device, clientIp, item);
+            String syslogMsg = String.format("<%d>%s %s User '%s' on Device '%s' viewed '%s' [%s]",
+                    pri, timestamp, clientIp, user, device, item, action);
 
             LogQueue.offer(syslogMsg);
+            System.out.println("[INTERACTION API] Ghi nhan thao tac san pham: " + item + " boi " + user + " (" + clientIp + ")");
 
             String jsonResp = "{\"status\":\"ok\"}";
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
