@@ -135,18 +135,19 @@
       style: "display: none; pointer-events: none;"
     });
 
+    // Label nho gon gang (Mini Tooltip Badge) theo yeu cau nguoi dung
     const tooltipGroup = svgElement("g", { class: "traffic-tooltip", style: "display: none; pointer-events: none;" });
     const tooltipBg = svgElement("rect", {
-      class: "traffic-tooltip-bg", width: "220", height: "92", rx: "8",
+      class: "traffic-tooltip-bg", width: "205", height: "56", rx: "6", ry: "6",
       fill: "#0f172a", "fill-opacity": "0.96", stroke: "#334155", "stroke-width": "1.2"
     });
-    const timeText = svgElement("text", { class: "traffic-tooltip-time", x: "10", y: "17", fill: "#94a3b8", "font-size": "11px" });
-    const rateText = svgElement("text", { class: "traffic-tooltip-rate", x: "10", y: "35", fill: "#38bdf8", "font-weight": "700", "font-size": "13px" });
-    const statusText = svgElement("text", { class: "traffic-tooltip-status", x: "10", y: "52", fill: "#4ade80", "font-weight": "600", "font-size": "11px" });
-    const ratioText = svgElement("text", { class: "traffic-tooltip-ratio", x: "10", y: "68", fill: "#e2e8f0", "font-size": "10.5px" });
-    const streamText = svgElement("text", { class: "traffic-tooltip-stream", x: "10", y: "84", fill: "#94a3b8", "font-size": "10.5px" });
+    const dotIndicator = svgElement("circle", { cx: "12", cy: "15", r: "3.5", fill: "#38bdf8" });
+    const speedText = svgElement("text", { x: "21", y: "19", fill: "#f8fafc", "font-weight": "700", "font-size": "12px" });
+    const timeText = svgElement("text", { x: "105", y: "19", fill: "#94a3b8", "font-size": "9.5px" });
+    const totalLogText = svgElement("text", { x: "12", y: "35", fill: "#38bdf8", "font-weight": "600", "font-size": "11px" });
+    const catText = svgElement("text", { x: "12", y: "49", fill: "#94a3b8", "font-size": "9.5px" });
 
-    tooltipGroup.append(tooltipBg, timeText, rateText, statusText, ratioText, streamText);
+    tooltipGroup.append(tooltipBg, dotIndicator, speedText, timeText, totalLogText, catText);
 
     // Vung bat su kien chuot (Transparent Overlay)
     const overlay = svgElement("rect", {
@@ -154,14 +155,15 @@
       fill: "transparent", style: "cursor: crosshair; pointer-events: all;"
     });
 
-    overlay.addEventListener("pointermove", (e) => {
+    function updateHover(clientX, clientY) {
       const rect = overlay.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const clampedX = Math.max(0, Math.min(plotWidth, mouseX));
-      const rawIndex = Math.round((clampedX / plotWidth) * 299);
+      if (!rect || rect.width <= 0) return;
+      // Chuan hoa toa do chuot tu man hinh sang ty le thuc te cua bieu do [0..1]
+      const normalizedX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const rawIndex = Math.min(299, Math.round(normalizedX * 299));
 
-      // CO CHE TU TINH (Magnetic Snapping):
-      // Tu dong hut chuot vao dinh dot bien (Spike / Bar) trong pham vi ±12 giay (~18px)
+      // Co che tu tinh (Magnetic Snapping):
+      // Tu dong hut chuot vao cot dinh dot bien gan nhat trong pham vi ±12 giay
       let index = rawIndex;
       let maxNearRate = snapshot.rates[rawIndex] || 0;
       const searchRadius = 12;
@@ -193,7 +195,7 @@
       cursorDot.setAttribute("cx", cx);
       cursorDot.setAttribute("cy", cy);
       cursorDot.setAttribute("fill", sevColor);
-      cursorDot.setAttribute("r", isSpike ? "6.5" : "5");
+      cursorDot.setAttribute("r", isSpike ? "6" : "4.5");
       cursorDot.style.display = "block";
 
       if (rate > 0) {
@@ -210,54 +212,44 @@
       const diffSec = Math.max(0, Math.round((snapshot.end - atTime.getTime()) / 1000));
       const minAgo = (diffSec / 60).toFixed(1);
 
-      timeText.textContent = `⏱️ ${time.format(atTime)} (−${minAgo} phút)`;
-      rateText.textContent = `📈 ${rate} log/giây ${isSpike ? "⚡ [ĐỘT BIẾN LƯU LƯỢNG]" : ""}`;
-      rateText.setAttribute("fill", isSpike ? sevColor : "#38bdf8");
-
-      let statusMsg = "● Trạng thái: Ổn định";
-      if (highestSev === "CRITICAL") {
-        statusMsg = "🔴 NGUY HIỂM: " + (secD ? secD.dominantCat : "CRITICAL");
-      } else if (highestSev === "ERROR") {
-        statusMsg = "🛑 LỖI HỆ THỐNG: " + (secD ? secD.dominantCat : "ERROR");
-      } else if (highestSev === "WARNING") {
-        statusMsg = "🟡 CẢNH BÁO NGHẼN: " + (secD ? secD.dominantCat : "WARNING");
-      } else if (isSpike) {
-        statusMsg = "🔵 ĐỘT BIẾN TẢI: " + (secD ? secD.dominantCat : "INFO");
-      }
-      statusText.textContent = statusMsg;
-      statusText.setAttribute("fill", sevColor);
-
-      if (secD && secD.counts) {
-        const parts = [];
-        if (secD.counts.CRITICAL) parts.push(`${secD.counts.CRITICAL} CRITICAL`);
-        if (secD.counts.ERROR) parts.push(`${secD.counts.ERROR} ERROR`);
-        if (secD.counts.WARNING) parts.push(`${secD.counts.WARNING} WARNING`);
-        if (secD.counts.INFO) parts.push(`${secD.counts.INFO} INFO`);
-        ratioText.textContent = `📊 Phân loại: ${parts.join(" · ") || "0 log"}`;
-        streamText.textContent = `📱 Thiết bị: ${secD.topDevice || 'Máy client'} · IP: ${secD.topIp || '127.0.0.1'}`;
-      } else {
-        ratioText.textContent = `📊 Phân loại: Chưa có lưu lượng`;
-        streamText.textContent = `🌐 Luồng định kỳ hệ thống`;
-      }
+      dotIndicator.setAttribute("fill", sevColor);
+      speedText.textContent = `${rate} log/giây`;
+      timeText.textContent = `· ${time.format(atTime)} (−${minAgo}m)`;
+      totalLogText.textContent = `📊 Tổng log: ${number.format(snapshot.total)} gói tin`;
+      catText.textContent = isSpike ? `⚡ ĐỘT BIẾN LƯU LƯỢNG [${highestSev}]` : (rate > 0 ? `● ${highestSev} (${secD ? secD.dominantCat : 'TẢI MẠNG'})` : `● Hệ thống ổn định (0 log)`);
+      catText.setAttribute("fill", isSpike ? sevColor : "#94a3b8");
 
       let tooltipX = cx + 12;
-      if (tooltipX + 225 > width - right) {
-        tooltipX = cx - 232;
+      const tipWidth = 205;
+      const tipHeight = 56;
+      if (tooltipX + tipWidth > width - right) {
+        tooltipX = cx - tipWidth - 12;
       }
-      let tooltipY = cy - 46;
+      let tooltipY = cy - 28;
       if (tooltipY < top) tooltipY = top + 4;
-      if (tooltipY + 92 > height - bottom) tooltipY = height - bottom - 92;
+      if (tooltipY + tipHeight > height - bottom) tooltipY = height - bottom - tipHeight;
 
       tooltipGroup.setAttribute("transform", `translate(${tooltipX}, ${tooltipY})`);
       tooltipGroup.style.display = "block";
+    }
+
+    overlay.addEventListener("pointermove", (e) => {
+      container._hoverState = { active: true, clientX: e.clientX, clientY: e.clientY };
+      updateHover(e.clientX, e.clientY);
     });
 
     overlay.addEventListener("pointerleave", () => {
+      container._hoverState = { active: false };
       cursorLine.style.display = "none";
       cursorDot.style.display = "none";
       activeBarHighlight.style.display = "none";
       tooltipGroup.style.display = "none";
     });
+
+    // Neu truoc do nguoi dung dang de chuot o day thi lap tuc tai hien vi tri hover ngay sau khi render
+    if (container._hoverState && container._hoverState.active) {
+      updateHover(container._hoverState.clientX, container._hoverState.clientY);
+    }
 
     svg.append(cursorLine, activeBarHighlight, cursorDot, tooltipGroup, overlay);
     container.replaceChildren(svg);
@@ -405,9 +397,9 @@
 
     overlay.addEventListener("pointermove", (e) => {
       const rect = overlay.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const clampedX = Math.max(0, Math.min(plotWidth, mouseX));
-      const u = Math.max(1, Math.min(maxUsers, Math.round((clampedX / plotWidth) * maxUsers)));
+      if (!rect || rect.width <= 0) return;
+      const normalizedX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const u = Math.max(1, Math.min(maxUsers, Math.round(normalizedX * maxUsers)));
       const m = calcMetrics(u);
 
       const cx = x(u);
