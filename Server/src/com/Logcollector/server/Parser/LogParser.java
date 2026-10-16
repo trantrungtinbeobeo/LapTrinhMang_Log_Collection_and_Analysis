@@ -18,7 +18,7 @@ public class LogParser {
 
     private static final Pattern DEVICE_PATTERN = Pattern.compile("(?:device|Device|from device)\\s*['\"]([^'\"]+)['\"]|(?:device|Device|from device)\\s*[:=]?\\s*([^'\"|\\r\\n]+)");
     private static final Pattern IP_PATTERN = Pattern.compile("(?:\\b|from\\s+|rhost=|IP:\\s*|from\\s+IP\\s+)([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
-    private static final Pattern USER_PATTERN = Pattern.compile("(?:user|User|nguoi dung)\\s*['\":]\\s*([^'\";|\\r\\n\\]]+)");
+    private static final Pattern USER_PATTERN = Pattern.compile("(?:[Uu]ser|for user|nguoi dung)\\s*['\":]?\\s*([^'\";|\\r\\n\\]\\s]+)");
 
     /**
      * Ham boc tach (Parse) va chuan hoa (Normalize)
@@ -130,8 +130,6 @@ public class LogParser {
         }
         return "APPLICATION";
     }
-
-    private static final Pattern USER_PATTERN = Pattern.compile("(?:User|user|for user)\\s*['\"]?([a-zA-Z0-9_.-]+)['\"]?");
 
     public static String extractDevice(String rawLog, String fallback) {
         if (rawLog != null) {

@@ -44,6 +44,39 @@ public class ServerMain {
         return purged;
     }
 
+    public static boolean unblockIp(String ip) {
+        if (ip == null || ip.trim().isEmpty()) return false;
+        String cleanIp = ip.trim();
+        boolean removed = BLOCKED_IPS.remove(cleanIp);
+        if (removed) {
+            System.out.println("\n[FIREWALL UNBLOCK] DA MO KHOA / BO CHAN IP: " + cleanIp);
+            if (globalWsServer != null) {
+                String unblockJson = String.format(
+                    "{\"type\":\"IP_UNBLOCKED\",\"ip\":\"%s\",\"timestamp\":\"%s\"}",
+                    escapeJson(cleanIp),
+                    Instant.now().toString()
+                );
+                globalWsServer.broadcast(unblockJson);
+            }
+        }
+        return removed;
+    }
+
+    public static int unblockAllIps() {
+        int count = BLOCKED_IPS.size();
+        BLOCKED_IPS.clear();
+        System.out.println("\n[FIREWALL UNBLOCK ALL] DA GO TOAN BO " + count + " IP KHOI BLACKLIST!");
+        if (globalWsServer != null) {
+            String unblockAllJson = String.format(
+                "{\"type\":\"ALL_IPS_UNBLOCKED\",\"count\":%d,\"timestamp\":\"%s\"}",
+                count,
+                Instant.now().toString()
+            );
+            globalWsServer.broadcast(unblockAllJson);
+        }
+        return count;
+    }
+
     public static void main(String[] args) {
         System.out.println("==================================================");
         System.out.println("   KHOI DONG SERVER TIEP NHAN & PHAN TICH LOG     ");
