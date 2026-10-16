@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 public class LogParser {
 
     // 1. REGEX: Cấu trúc bóc tách chuẩn Syslog (Có chứa PRI, Timestamp, IP và Nội dung)
-    private static final String SYSLOG_REGEX = "^<(\\d{1,3})>(?:1\\s+)?(?:(\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?|[A-Za-z]{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}))?\\s+([0-9a-zA-Z.:_-]+)\\s+(.*)$";
+    private static final String SYSLOG_REGEX = "^<(\\d{1,3})>(?:1\\s+)?(?:(\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?|[A-Za-z]{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}))?\\s+([^\\s]+)\\s+(.*)$";
     private static final Pattern PATTERN = Pattern.compile(SYSLOG_REGEX);
 
     // Mảng dùng để chuẩn hóa Severity Level (Từ mã số sang tên gọi)
@@ -18,6 +18,7 @@ public class LogParser {
 
     private static final Pattern DEVICE_PATTERN = Pattern.compile("(?:device|Device|from device)\\s*['\"]([^'\"]+)['\"]|(?:device|Device|from device)\\s*[:=]?\\s*([^'\"|\\r\\n]+)");
     private static final Pattern IP_PATTERN = Pattern.compile("(?:\\b|from\\s+|rhost=|IP:\\s*|from\\s+IP\\s+)([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
+    private static final Pattern USER_PATTERN = Pattern.compile("(?:user|User|nguoi dung)\\s*['\":]\\s*([^'\";|\\r\\n\\]]+)");
 
     /**
      * Ham boc tach (Parse) va chuan hoa (Normalize)
@@ -87,9 +88,22 @@ public class LogParser {
             Matcher ipMatcher = IP_PATTERN.matcher(rawLog);
             String ip = ipMatcher.find() ? ipMatcher.group(1) : "127.0.0.1";
 
+            // Trich xuat PRI va Severity thuc te neu chuoi bat dau bang <pri>
+            String severityLevel = "INFO";
+            int facility = 1;
+            Matcher priMatcher = Pattern.compile("^<(\\d{1,3})>").matcher(rawLog.trim());
+            if (priMatcher.find()) {
+                int pri = Integer.parseInt(priMatcher.group(1));
+                facility = pri / 8;
+                int severityCode = pri % 8;
+                if (severityCode >= 0 && severityCode < SEVERITY_NAMES.length) {
+                    severityLevel = SEVERITY_NAMES[severityCode];
+                }
+            }
+
             return new LogEvent(ip, device, category, 
                                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 
-                                1, "INFO", rawLog.trim());
+                                facility, severityLevel, rawLog.trim());
         }
     }
 

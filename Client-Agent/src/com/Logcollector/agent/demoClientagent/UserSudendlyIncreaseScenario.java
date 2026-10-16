@@ -77,13 +77,13 @@ public class UserSudendlyIncreaseScenario {
         }
 
         List<WaveConfig> waves = new ArrayList<>();
-        waves.add(new WaveConfig(1, 20, 20, 350, "ĐỢT 1: LƯU LƯỢNG NỀN TĂNG DẦN", "Khách hàng duyệt web ban đầu (1 -> 20 Users)", "Hạ tầng UDP 514 & TCP 9999 xử lý mượt mà, độ trễ tối ưu <35ms"));
-        waves.add(new WaveConfig(21, 45, 12, 400, "ĐỢT 2: ĐỘT BIẾN +25 USERS", "Flash Sale mở bán điện thoại & laptop (21 -> 45 Users)", "Lưu lượng nhận tăng nhanh, LogQueue đệm tốt, chưa có độ trễ"));
-        waves.add(new WaveConfig(46, 75, 10, 450, "ĐỢT 3: ĐỘT BIẾN +30 USERS", "Thông báo khuyến mãi gửi đến thiết bị (46 -> 75 Users)", "Hệ thống tiệm cận ngưỡng 80 users, bắt đầu nhích độ trễ nhẹ"));
-        waves.add(new WaveConfig(76, 105, 10, 500, "ĐỢT 4: ĐỘT BIẾN +30 USERS (VƯỢT NGƯỠNG)", "Vượt ngưỡng an toàn 80 users (76 -> 105 Users)", "LogQueue bắt đầu dồn hàng đợi, luồng SQLite Disk I/O tăng thời gian ghi nhận"));
-        waves.add(new WaveConfig(106, 135, 10, 500, "ĐỢT 5: ĐỘT BIẾN +30 USERS (BẮT ĐẦU CHẬM)", "Giỏ hàng & kiểm tra thanh toán bị trễ (106 -> 135 Users)", "Độ trễ chạm 450ms, 55% khách hàng khác cảm thấy web xoay vòng"));
-        waves.add(new WaveConfig(136, 165, 8, 550, "ĐỢT 6: ĐỘT BIẾN +30 USERS (NGHẼN TẢI NẶNG)", "Cảnh báo nghẽn tải nghiêm trọng (136 -> 165 Users)", "Độ trễ vượt 750ms, bắt đầu xuất hiện lỗi rớt gói tin và HTTP 404"));
-        waves.add(new WaveConfig(166, 200, 8, 300, "ĐỢT 7: ĐỘT BIẾN +35 USERS (QUÁ TẢI ĐỈNH)", "Quá tải đỉnh điểm 200 Users đồng thời (166 -> 200 Users)", "Luồng consumer quá tải, 35% lượt truy cập gặp lỗi 404 / 503, 95% khách hàng bị chậm"));
+        waves.add(new WaveConfig(1, 20, 35, 2000, "ĐỢT 1: LƯU LƯỢNG NỀN TĂNG DẦN", "Khách hàng duyệt web ban đầu (1 -> 20 Users)", "Hạ tầng UDP 514 & TCP 9999 xử lý mượt mà, độ trễ tối ưu <35ms"));
+        waves.add(new WaveConfig(21, 45, 30, 2200, "ĐỢT 2: ĐỘT BIẾN +25 USERS", "Flash Sale mở bán điện thoại & laptop (21 -> 45 Users)", "Lưu lượng nhận tăng nhanh, LogQueue đệm tốt, chưa có độ trễ"));
+        waves.add(new WaveConfig(46, 75, 28, 2200, "ĐỢT 3: ĐỘT BIẾN +30 USERS", "Thông báo khuyến mãi gửi đến thiết bị (46 -> 75 Users)", "Hệ thống tiệm cận ngưỡng 80 users, bắt đầu nhích độ trễ nhẹ"));
+        waves.add(new WaveConfig(76, 105, 25, 2500, "ĐỢT 4: ĐỘT BIẾN +30 USERS (VƯỢT NGƯỠNG)", "Vượt ngưỡng an toàn 80 users (76 -> 105 Users)", "LogQueue bắt đầu dồn hàng đợi, luồng SQLite Disk I/O tăng thời gian ghi nhận"));
+        waves.add(new WaveConfig(106, 135, 25, 2500, "ĐỢT 5: ĐỘT BIẾN +30 USERS (BẮT ĐẦU CHẬM)", "Giỏ hàng & kiểm tra thanh toán bị trễ (106 -> 135 Users)", "Độ trễ chạm 450ms, 55% khách hàng khác cảm thấy web xoay vòng"));
+        waves.add(new WaveConfig(136, 165, 22, 2500, "ĐỢT 6: ĐỘT BIẾN +30 USERS (NGHẼN TẢI NẶNG)", "Cảnh báo nghẽn tải nghiêm trọng (136 -> 165 Users)", "Độ trễ vượt 750ms, bắt đầu xuất hiện lỗi rớt gói tin và HTTP 404"));
+        waves.add(new WaveConfig(166, 200, 20, 2000, "ĐỢT 7: ĐỘT BIẾN +35 USERS (QUÁ TẢI ĐỈNH)", "Quá tải đỉnh điểm 200 Users đồng thời (166 -> 200 Users)", "Luồng consumer quá tải, 35% lượt truy cập gặp lỗi 404 / 503, 95% khách hàng bị chậm"));
 
         SyslogFormatter formatter = new SyslogFormatter();
         TCPSender tcpSender = new TCPSender(HOST, TCP_PORT);
@@ -97,9 +97,25 @@ public class UserSudendlyIncreaseScenario {
         for (WaveConfig w : waves) {
             int waveCount = w.endU - w.startU + 1;
             int midU = w.endU;
-            int curLatency = (midU <= 80) ? (18 + (int)(midU * 0.9)) : (midU <= 150 ? (90 + (int)(Math.pow(midU - 80, 1.45) * 2.2)) : (450 + (int)(Math.pow(midU - 150, 1.6) * 7.5)));
-            double curImpact = (midU <= 80) ? ((midU / 80.0) * 8.0) : (midU <= 150 ? (10.0 + ((midU - 80) / 70.0) * 50.0) : (65.0 + ((midU - 150) / 50.0) * 30.0));
-            double cur404 = (midU <= 80) ? (0.05 + (midU / 80.0) * 0.45) : (midU <= 150 ? (1.0 + ((midU - 80) / 70.0) * 12.0) : (15.0 + ((midU - 150) / 50.0) * 20.0));
+            int curLatency;
+            double curImpact;
+            double cur404;
+            if (midU <= 80) {
+                double r = midU / 80.0;
+                curLatency = 18 + (int)(r * 67);
+                curImpact = r * 8.0;
+                cur404 = 0.05 + r * 0.45;
+            } else if (midU <= 150) {
+                double r = (midU - 80) / 70.0;
+                curLatency = 85 + (int)(Math.pow(r, 1.5) * 365);
+                curImpact = 8.0 + Math.pow(r, 1.2) * 52.0;
+                cur404 = 0.5 + Math.pow(r, 1.3) * 11.5;
+            } else {
+                double r = (midU - 150) / 50.0;
+                curLatency = 450 + (int)(Math.pow(r, 1.4) * 700);
+                curImpact = 60.0 + Math.pow(r, 1.1) * 35.0;
+                cur404 = 12.0 + Math.pow(r, 1.2) * 23.0;
+            }
 
             System.out.println("======================================================================");
             System.out.printf("🌊 [%s | TĂNG VỌT +%d USERS] %s%n", w.name, waveCount, w.phaseDesc);
@@ -123,23 +139,26 @@ public class UserSudendlyIncreaseScenario {
                 String action;
 
                 if (u <= 80) {
-                    latency = 18 + (int) (u * 0.9);
-                    shoppingImpact = (u / 80.0) * 8.0;
-                    pred404Rate = 0.05 + (u / 80.0) * 0.45;
+                    double r = u / 80.0;
+                    latency = 18 + (int) (r * 67);
+                    shoppingImpact = r * 8.0;
+                    pred404Rate = 0.05 + r * 0.45;
                     severity = "INFO";
                     action = (u % 5 == 0) ? "ADD_TO_CART" : "LOGIN_AND_VIEW";
                 } else if (u <= 150) {
                     int extra = u - 80;
-                    latency = 90 + (int) (Math.pow(extra, 1.45) * 2.2);
-                    shoppingImpact = 10.0 + (extra / 70.0) * 50.0;
-                    pred404Rate = 1.0 + (extra / 70.0) * 12.0;
+                    double r = extra / 70.0;
+                    latency = 85 + (int) (Math.pow(r, 1.5) * 365);
+                    shoppingImpact = 8.0 + Math.pow(r, 1.2) * 52.0;
+                    pred404Rate = 0.5 + Math.pow(r, 1.3) * 11.5;
                     severity = "WARNING";
                     action = (u % 8 == 0) ? "CART_DELAYED" : "PAGE_SLOW_RESPONSE";
                 } else {
                     int extra = u - 150;
-                    latency = 450 + (int) (Math.pow(extra, 1.6) * 7.5);
-                    shoppingImpact = 65.0 + (extra / 50.0) * 30.0;
-                    pred404Rate = 15.0 + (extra / 50.0) * 20.0;
+                    double r = extra / 50.0;
+                    latency = 450 + (int) (Math.pow(r, 1.4) * 700);
+                    shoppingImpact = 60.0 + Math.pow(r, 1.1) * 35.0;
+                    pred404Rate = 12.0 + Math.pow(r, 1.2) * 23.0;
                     severity = "CRITICAL";
                     action = (u % 6 == 0) ? "HTTP_404_PAGE_NOT_FOUND" : (u % 4 == 0 ? "CHECKOUT_TIMEOUT" : "SERVER_BUSY_503");
                 }
