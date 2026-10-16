@@ -20,7 +20,7 @@ public class SyslogFormatter {
     private final String procId;
 
     public SyslogFormatter() {
-        this(detectHostname(), "LogCollector",
+        this(getDeviceDescription(), "LogCollector",
                 String.valueOf(ProcessHandle.current().pid()));
     }
 
@@ -28,6 +28,16 @@ public class SyslogFormatter {
         this.hostname = sanitizeHeader(hostname);
         this.appName = sanitizeHeader(appName);
         this.procId = sanitizeHeader(procId);
+    }
+
+    public static String getCurrentUser() {
+        String user = System.getProperty("user.name");
+        if (user != null && !user.trim().isEmpty()) return user.trim();
+        String envUser = System.getenv("USERNAME");
+        if (envUser != null && !envUser.trim().isEmpty()) return envUser.trim();
+        String envLogin = System.getenv("USER");
+        if (envLogin != null && !envLogin.trim().isEmpty()) return envLogin.trim();
+        return "operator";
     }
 
     public static String detectHostname() {
@@ -46,8 +56,9 @@ public class SyslogFormatter {
 
     public static String getDeviceDescription() {
         String host = detectHostname();
-        String os = System.getProperty("os.name", "Unknown-OS");
-        return host + " (" + os + ")";
+        String os = System.getProperty("os.name", "Windows-PC");
+        String user = getCurrentUser();
+        return host + " (" + os + ") [User: " + user + "]";
     }
 
     private int toSyslogSeverity(String severity) {

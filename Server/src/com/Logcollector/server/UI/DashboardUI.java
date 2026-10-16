@@ -198,15 +198,16 @@ public class DashboardUI {
             String eventType = success ? "LOGIN_SUCCESS" : "LOGIN_FAILED";
             String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
+            String deviceWithUser = device + " [User: " + email + "]";
             String syslogMsg = String.format("<%d>%s %s %s - Device '%s' [IP: %s] %s user '%s'",
-                    pri, timestamp, clientIp, eventType, device, clientIp,
+                    pri, timestamp, clientIp, eventType, deviceWithUser, clientIp,
                     (success ? "logged in successfully as" : "failed password for"), email);
 
             // Day vao hang doi log cua he thong
             LogQueue.offer(syslogMsg);
-            System.out.println("[AUTH API] Da ghi nhan dang nhap tu " + clientIp + ": " + email + " (" + eventType + ")");
+            System.out.println("[AUTH API] Da ghi nhan dang nhap tu " + clientIp + ": " + email + " tren " + device + " (" + eventType + ")");
 
-            String jsonResp = String.format("{\"status\":\"ok\",\"device\":\"%s\",\"ip\":\"%s\"}", device, clientIp);
+            String jsonResp = String.format("{\"status\":\"ok\",\"device\":\"%s\",\"ip\":\"%s\"}", deviceWithUser, clientIp);
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
             exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
             byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
@@ -253,11 +254,12 @@ public class DashboardUI {
             int pri = 14;
             String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
+            String deviceWithUser = device + " [User: " + user + "]";
             String syslogMsg = String.format("<%d>%s %s User '%s' on Device '%s' viewed '%s' [%s]",
-                    pri, timestamp, clientIp, user, device, item, action);
+                    pri, timestamp, clientIp, user, deviceWithUser, item, action);
 
             LogQueue.offer(syslogMsg);
-            System.out.println("[INTERACTION API] Ghi nhan thao tac san pham: " + item + " boi " + user + " (" + clientIp + ")");
+            System.out.println("[INTERACTION API] Ghi nhan thao tac san pham: " + item + " boi " + user + " tren " + device + " (" + clientIp + ")");
 
             String jsonResp = "{\"status\":\"ok\"}";
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");

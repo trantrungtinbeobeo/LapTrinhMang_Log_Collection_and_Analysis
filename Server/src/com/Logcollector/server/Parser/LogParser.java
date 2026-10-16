@@ -16,7 +16,7 @@ public class LogParser {
         "WARNING", "NOTICE", "INFO", "DEBUG"
     };
 
-    private static final Pattern DEVICE_PATTERN = Pattern.compile("(?:device|Device|from device|Device\\s*')\\s*['\"]?([^'\"|\\]\\r\\n]+)['\"]?");
+    private static final Pattern DEVICE_PATTERN = Pattern.compile("(?:device|Device|from device)\\s*['\"]([^'\"]+)['\"]|(?:device|Device|from device)\\s*[:=]?\\s*([^'\"|\\r\\n]+)");
     private static final Pattern IP_PATTERN = Pattern.compile("(?:\\b|from\\s+|rhost=|IP:\\s*|from\\s+IP\\s+)([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
 
     /**
@@ -65,6 +65,15 @@ public class LogParser {
                 } else {
                     ip = "127.0.0.1";
                 }
+                if (!device.contains("[User:") && !device.contains("User:")) {
+                    Matcher u = USER_PATTERN.matcher(message);
+                    if (u.find()) {
+                        String user = u.group(1).trim();
+                        if (!user.isEmpty()) {
+                            device = device + " [User: " + user + "]";
+                        }
+                    }
+                }
             }
 
             // Xac dinh nhom phan loai (Category)
@@ -102,12 +111,33 @@ public class LogParser {
         return "APPLICATION";
     }
 
+    private static final Pattern USER_PATTERN = Pattern.compile("(?:User|user|for user)\\s*['\"]?([a-zA-Z0-9_.-]+)['\"]?");
+
     public static String extractDevice(String rawLog, String fallback) {
         if (rawLog != null) {
             Matcher m = DEVICE_PATTERN.matcher(rawLog);
             if (m.find()) {
-                String dev = m.group(1).trim();
-                if (!dev.isEmpty()) return dev;
+                String dev = m.group(1) != null ? m.group(1).trim() : (m.group(2) != null ? m.group(2).trim() : "");
+                if (!dev.isEmpty()) {
+                    if (!dev.contains("[User:") && !dev.contains("User:")) {
+                        Matcher u = USER_PATTERN.matcher(rawLog);
+                        if (u.find()) {
+                            String user = u.group(1).trim();
+                            if (!user.isEmpty()) {
+                                return dev + " [User: " + user + "]";
+                            }
+                        }
+                    }
+                    return dev;
+                }
+            }
+            Matcher u = USER_PATTERN.matcher(rawLog);
+            if (u.find()) {
+                String user = u.group(1).trim();
+                if (!user.isEmpty()) {
+                    String base = (fallback != null && !fallback.trim().isEmpty()) ? fallback : "Network-Device";
+                    return base + " [User: " + user + "]";
+                }
             }
         }
         return (fallback != null && !fallback.trim().isEmpty()) ? fallback : "Network-Device";
