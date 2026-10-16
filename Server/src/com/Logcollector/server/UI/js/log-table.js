@@ -37,6 +37,9 @@
       const fragment = document.createDocumentFragment();
       filtered.slice(offset, offset + pageSize).forEach(event => {
         const row = document.createElement("tr");
+        row.title = "Nhấp chuột để xem chi tiết log này";
+        row.addEventListener("click", () => openLogDetail(event));
+
         const dateCell = document.createElement("td");
         const date = document.createElement("time");
         date.dateTime = new Date(event.at).toISOString();
@@ -82,7 +85,10 @@
         detailBtn.className = "btn btn-outline btn-tiny";
         detailBtn.textContent = "Xem";
         detailBtn.title = "Xem chi tiết bản ghi log này";
-        detailBtn.addEventListener("click", () => openLogDetail(event));
+        detailBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openLogDetail(event);
+        });
         actionCell.append(detailBtn);
 
         row.append(dateCell, severityCell, ipCell, catCell, messageCell, actionCell);
@@ -212,6 +218,21 @@
         } else {
           adviceEl.className = "advice-box";
           adviceEl.innerHTML = `<strong>ℹ️ NHẬT KÝ BÌNH THƯỜNG:</strong> Sự kiện vận hành tiêu chuẩn của hệ thống và dịch vụ mạng. Không phát hiện dấu hiệu bất thường.`;
+        }
+      }
+
+      const blockBtn = byId("modal-block-ip-btn");
+      if (blockBtn) {
+        const targetIp = (event.ip || "").trim();
+        blockBtn.dataset.ip = targetIp;
+        if (!targetIp || targetIp === "127.0.0.1" || targetIp === "localhost") {
+          blockBtn.disabled = true;
+          blockBtn.textContent = `⛔ Chặn IP (${targetIp || 'Loopback'})`;
+          blockBtn.title = "Không thể chặn IP loopback cục bộ";
+        } else {
+          blockBtn.disabled = false;
+          blockBtn.textContent = `⛔ Chặn IP [${targetIp}] & Xóa log CSDL`;
+          blockBtn.title = `Khóa IP ${targetIp} vào Firewall và xóa toàn bộ log của IP này khỏi SQLite`;
         }
       }
 

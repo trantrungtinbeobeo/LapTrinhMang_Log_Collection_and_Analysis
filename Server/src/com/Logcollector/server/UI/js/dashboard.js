@@ -173,6 +173,144 @@
   window.addEventListener("pageshow", startUpdating);
   startUpdating();
 
+  // Quan ly Khung Terminal Log Thô (Raw Syslog Stream Console)
+  const rawConsole = byId("raw-console");
+  const rawCountBadge = byId("raw-count-badge");
+  const autoscrollBtn = byId("terminal-autoscroll-btn");
+  const clearTerminalBtn = byId("terminal-clear-btn");
+  let rawPacketCount = 0;
+  let autoScrollRaw = true;
+
+  if (autoscrollBtn) {
+    autoscrollBtn.addEventListener("click", () => {
+      autoScrollRaw = !autoScrollRaw;
+      autoscrollBtn.setAttribute("aria-pressed", String(autoScrollRaw));
+      autoscrollBtn.className = `terminal-btn ${autoScrollRaw ? "active" : ""}`;
+      autoscrollBtn.textContent = autoScrollRaw ? "Cuộn tự động: BẬT" : "Cuộn tự động: TẮT";
+    });
+  }
+
+  if (clearTerminalBtn) {
+    clearTerminalBtn.addEventListener("click", () => {
+      if (rawConsole) {
+        rawConsole.innerHTML = '<p class="raw-empty-text">Màn hình terminal đã được xóa. Đang chờ gói tin mới...</p>';
+      }
+      rawPacketCount = 0;
+      if (rawCountBadge) rawCountBadge.textContent = "0 gói tin";
+    });
+  }
+
+  function appendRawTerminal(rawText, isBlocked = false) {
+    if (!rawConsole || !rawText) return;
+    const emptyNotice = rawConsole.querySelector(".raw-empty-text");
+    if (emptyNotice) emptyNotice.remove();
+
+    rawPacketCount += 1;
+    if (rawCountBadge) rawCountBadge.textContent = `${number.format(rawPacketCount)} gói tin`;
+
+    const line = document.createElement("pre");
+    line.className = "raw-line";
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "raw-line-time";
+    timeSpan.textContent = `[${time.format(Date.now())}]`;
+    line.append(timeSpan);
+
+    if (isBlocked) {
+      const dropSpan = document.createElement("span");
+      dropSpan.className = "raw-line-drop";
+      dropSpan.textContent = rawText;
+      line.append(dropSpan);
+    } else {
+      const priMatch = rawText.match(/^<(\d{1,3})>/);
+      if (priMatch) {
+        const priSpan = document.createElement("span");
+        priSpan.className = "raw-line-pri";
+        priSpan.textContent = `<${priMatch[1]}>`;
+        line.append(priSpan);
+        const textNode = document.createTextNode(rawText.substring(priMatch[0].length));
+        line.append(textNode);
+      } else {
+        line.append(document.createTextNode(rawText));
+      }
+    }
+
+    rawConsole.appendChild(line);
+
+    while (rawConsole.childNodes.length > 150) {
+      rawConsole.removeChild(rawConsole.firstChild);
+    }
+
+    if (autoScrollRaw) {
+      rawConsole.scrollTop = rawConsole.scrollHeight;
+    }
+  }
+
+  // Quan ly Danh sach IP bi khoa (Firewall Blacklist)
+  const blacklistCard = byId("firewall-blacklist-card");
+  const blacklistChips = byId("firewall-blacklist-chips");
+  const blockedIpsSet = new Set();
+
+  function addBlockedIpChip(ip, reason, purged = 0) {
+    if (!ip || blockedIpsSet.has(ip)) return;
+    blockedIpsSet.add(ip);
+    if (blacklistCard) blacklistCard.hidden = false;
+    if (!blacklistChips) return;
+
+    const chip = document.createElement("span");
+    chip.className = "blacklist-chip";
+    chip.title = `Lý do: ${reason || 'Vi phạm an ninh'}`;
+
+    const ipText = document.createElement("span");
+    ipText.textContent = `⛔ ${ip}`;
+
+    const purgedBadge = document.createElement("span");
+    purgedBadge.className = "blacklist-chip-purged";
+    purgedBadge.textContent = `-${purged} log`;
+    purgedBadge.title = `Đã thanh lọc xóa ${purged} log khỏi SQLite`;
+
+    chip.append(ipText, purgedBadge);
+    blacklistChips.append(chip);
+  }
+
+  // Khoi tao tai danh sach IP da bi chan tu Server
+  fetch("/api/block-ip")
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.blockedIps && data.blockedIps.length) {
+        data.blockedIps.forEach(ip => addBlockedIpChip(ip, "Khởi tạo Firewall", 0));
+      }
+    })
+    .catch(() => {});
+
+  // Xu ly nut bam Chan IP thu cong tu Dialog Modal
+  const modalBlockBtn = byId("modal-block-ip-btn");
+  if (modalBlockBtn) {
+    modalBlockBtn.addEventListener("click", async () => {
+      const targetIp = modalBlockBtn.dataset.ip;
+      if (!targetIp || targetIp === "127.0.0.1") return;
+
+      const confirmBlock = confirm(
+        `[XÁC NHẬN AN NINH MẠNG]\n\nBạn có chắc chắn muốn KHÓA địa chỉ IP ${targetIp} vào Firewall?\n\n- Toàn bộ gói tin tiếp theo từ IP này sẽ bị DROP.\n- Toàn bộ log độc hại của IP này sẽ bị XÓA SẠCH khỏi CSDL SQLite để đảm bảo tính toàn vẹn.`
+      );
+      if (!confirmBlock) return;
+
+      try {
+        const resp = await fetch("/api/block-ip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ip: targetIp, reason: "Quản trị viên chặn thủ công từ Web Dashboard" })
+        });
+        const result = await resp.json();
+        const dialog = byId("log-detail-dialog");
+        if (dialog) dialog.close();
+        announce(`⛔ Đã kích hoạt Firewall chặn IP ${targetIp}! Đã thanh lọc ${result.purged || 0} log khỏi SQLite.`);
+      } catch (err) {
+        alert("Lỗi khi gửi yêu cầu khóa IP tới Server: " + err.message);
+      }
+    });
+  }
+
   // Ket noi WebSocket Real-time toi ServerMain qua cong 8085
   function connectWebSocket() {
     try {
@@ -196,6 +334,24 @@
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          if (data.type === "IP_BLOCKED") {
+            if (window.DashboardData && window.DashboardData.purgeLogsByIp) {
+              window.DashboardData.purgeLogsByIp(data.ip);
+            }
+            addBlockedIpChip(data.ip, data.reason, data.purged);
+            appendRawTerminal(`[FIREWALL BLACKLIST] ĐÃ KHÓA IP: ${data.ip} | Lý do: ${data.reason || 'CRITICAL'} | Đã xóa ${data.purged} log khỏi SQLite`, true);
+            announce(`⛔ AN NINH: Đã khóa IP ${data.ip} và xóa sạch ${data.purged} log độc hại khỏi CSDL!`);
+            render();
+            return;
+          }
+
+          if (data.raw) {
+            appendRawTerminal(data.raw);
+          } else if (data.message) {
+            appendRawTerminal(data.message);
+          }
+
           if (window.DashboardData && window.DashboardData.addLiveLog) {
             window.DashboardData.addLiveLog(data);
             if (scope && scope.value === "interaction") {
@@ -212,7 +368,6 @@
           badge.style.background = "";
           badge.style.color = "";
         }
-        // Thu ket noi lai sau 3 giay neu mat ket noi
         setTimeout(connectWebSocket, 3000);
       };
 
@@ -220,7 +375,7 @@
         ws.close();
       };
     } catch (e) {
-      // Trinh duyet hoac mang khong ho tro websocket thi giu nguyen che do demo
+      // Giu nguyen che do demo neu khong ket noi duoc
     }
   }
 

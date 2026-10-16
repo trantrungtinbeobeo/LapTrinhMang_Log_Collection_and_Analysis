@@ -140,6 +140,13 @@
     };
   }
 
+  function purgeLogsByIp(blockedIp) {
+    if (!blockedIp) return;
+    const clean = String(blockedIp).trim();
+    additions = additions.filter(event => (event.ip || "").trim() !== clean);
+    samples = samples.filter(event => (event.ip || "").trim() !== clean);
+  }
+
   resetSamples();
-  window.DashboardData = Object.freeze({ levels, resetSamples, addSample, addLiveLog, getSnapshot });
+  window.DashboardData = Object.freeze({ levels, resetSamples, addSample, addLiveLog, purgeLogsByIp, getSnapshot });
 })();
