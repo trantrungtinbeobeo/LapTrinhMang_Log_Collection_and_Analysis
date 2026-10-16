@@ -132,6 +132,13 @@
     document.body.classList.add("modal-open");
     DemoData.recordProductClick(product.id);
     renderClickCount();
+    try {
+      fetch("/api/interaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "VIEW_DEVICE", productName: product.name })
+      }).catch(() => {});
+    } catch (ignored) {}
   });
 
   document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => dialog.close()));

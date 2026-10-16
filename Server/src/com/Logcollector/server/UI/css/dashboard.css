@@ -97,4 +97,10 @@
 .advice-box.advice-critical { background: #fff1f2; border-left-color: var(--red); color: #9f1239; }
 .advice-box.advice-warning { background: #fffbeb; border-left-color: var(--amber); color: #92400e; }
 .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+.category-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; }
+.category-auth { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+.category-security { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.category-network { background: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
+.category-system { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+.category-application { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
 @media (max-width: 1000px) { .dashboard-grid-2col { grid-template-columns: minmax(0, 1fr); } }

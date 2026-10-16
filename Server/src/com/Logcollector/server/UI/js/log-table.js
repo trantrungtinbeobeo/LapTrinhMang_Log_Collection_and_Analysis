@@ -50,24 +50,24 @@
         badge.textContent = event.severity;
         severityCell.append(badge);
         const ipCell = document.createElement("td");
-        ipCell.className = "mono";
-        ipCell.textContent = event.ip || "—";
-        ipCell.title = event.ip ? "Địa chỉ IP mẫu, không phải IP thu thập thật" : "Frontend chưa thu thập IP";
-        const sourceCell = document.createElement("td");
-        const source = document.createElement("span");
-        if (event.source === "realtime") {
-          source.className = "badge";
-          source.style.background = "#059669";
-          source.style.color = "#ffffff";
-          source.textContent = "Server Realtime";
-        } else if (event.source === "interaction") {
-          source.className = "badge log-source log-source-interaction";
-          source.textContent = "Thao tác demo";
-        } else {
-          source.className = "badge log-source";
-          source.textContent = "Mẫu";
-        }
-        sourceCell.append(source);
+        const ipText = document.createElement("div");
+        ipText.className = "mono";
+        ipText.style.fontWeight = "600";
+        ipText.textContent = event.ip || "127.0.0.1";
+        const devText = document.createElement("div");
+        devText.className = "small muted";
+        devText.style.fontSize = "10px";
+        devText.style.whiteSpace = "nowrap";
+        devText.textContent = event.device || (event.source === "realtime" ? "Local-Host" : "Network-Host");
+        ipCell.append(ipText, devText);
+
+        const catCell = document.createElement("td");
+        const catBadge = document.createElement("span");
+        const catName = (event.category || (event.type && event.type.includes("LOGIN") ? "AUTH" : event.type && event.type.includes("ATTACK") ? "SECURITY" : "APPLICATION")).toUpperCase();
+        catBadge.className = `badge category-badge category-${catName.toLowerCase()}`;
+        catBadge.textContent = catName;
+        catCell.append(catBadge);
+
         const messageCell = document.createElement("td");
         const type = document.createElement("span");
         type.className = "event-name mono";
@@ -85,7 +85,7 @@
         detailBtn.addEventListener("click", () => openLogDetail(event));
         actionCell.append(detailBtn);
 
-        row.append(dateCell, severityCell, ipCell, sourceCell, messageCell, actionCell);
+        row.append(dateCell, severityCell, ipCell, catCell, messageCell, actionCell);
         fragment.append(row);
       });
       rows.replaceChildren(fragment);
@@ -159,6 +159,15 @@
 
       const logIpEl = byId("modal-log-ip");
       if (logIpEl) logIpEl.textContent = event.ip || "127.0.0.1";
+
+      const logDevEl = byId("modal-log-device");
+      if (logDevEl) logDevEl.textContent = event.device || "Máy chủ / Client-Agent";
+
+      const logCatEl = byId("modal-log-category");
+      if (logCatEl) {
+        const cat = (event.category || (event.type && event.type.includes("LOGIN") ? "AUTH" : "APPLICATION")).toUpperCase();
+        logCatEl.innerHTML = `<span class="badge category-badge category-${cat.toLowerCase()}">${cat}</span>`;
+      }
 
       const sevEl = byId("modal-log-severity");
       if (sevEl) {

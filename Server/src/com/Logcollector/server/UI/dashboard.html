@@ -171,10 +171,10 @@
             <tr>
               <th scope="col">Thời gian</th>
               <th scope="col">Mức độ</th>
-              <th scope="col">IP nguồn</th>
-              <th scope="col">Nguồn</th>
+              <th scope="col">IP / Thiết bị</th>
+              <th scope="col">Phân loại</th>
               <th scope="col">Sự kiện / Thông điệp</th>
-              <th scope="col" style="width: 90px; text-align: center;">Chi tiết</th>
+              <th scope="col" style="width: 80px; text-align: center;">Chi tiết</th>
             </tr>
           </thead>
           <tbody id="log-rows"></tbody>
@@ -195,7 +195,7 @@
     <!-- Dialog Modal: Xem chi tiet Log dang nhap & An ninh -->
     <dialog id="log-detail-dialog" class="log-detail-dialog">
       <div class="modal-header">
-        <h3 id="modal-title">Chi tiết Bản ghi Log Sự kiện</h3>
+        <h3 id="modal-title">Chi tiết Bản ghi Log Sự kiện Mạng</h3>
         <button class="icon-btn" id="modal-close-btn" type="button" aria-label="Đóng dialog">✕</button>
       </div>
       <div class="modal-body">
@@ -211,6 +211,14 @@
           <div class="detail-box">
             <span class="detail-label">Địa chỉ IP nguồn (Source IP)</span>
             <span class="detail-val mono" id="modal-log-ip">—</span>
+          </div>
+          <div class="detail-box">
+            <span class="detail-label">Thiết bị gửi log (Device / OS)</span>
+            <span class="detail-val" id="modal-log-device" style="font-size: 12px;">—</span>
+          </div>
+          <div class="detail-box">
+            <span class="detail-label">Phân loại sự kiện (Log Category)</span>
+            <span class="detail-val" id="modal-log-category">—</span>
           </div>
           <div class="detail-box">
             <span class="detail-label">Cấp độ nghiêm trọng (Severity)</span>

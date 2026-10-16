@@ -74,7 +74,8 @@ public class ServerMain {
 
                             System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
                             System.out.println("   -> [PARSED] IP: " + effectiveIp
-                                    + " | Thoi gian: " + event.getTimestamp()
+                                    + " | Thiet bi: " + event.getDevice()
+                                    + " | Phan loai: [" + event.getCategory() + "]"
                                     + " | Level: " + event.getSeverityLevel()
                                     + " | Noi dung: " + event.getMessage());
 
@@ -83,9 +84,11 @@ public class ServerMain {
 
                             // Phat tan log dang JSON qua WebSocket toi Dashboard
                             String logJson = String.format(
-                                "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
+                                "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"device\":\"%s\",\"category\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
                                 logIndex,
                                 escapeJson(effectiveIp),
+                                escapeJson(event.getDevice()),
+                                escapeJson(event.getCategory()),
                                 escapeJson(event.getTimestamp()),
                                 escapeJson(event.getSeverityLevel()),
                                 escapeJson(event.getMessage()),
@@ -108,12 +111,15 @@ public class ServerMain {
             IngestionEngine engine = new IngestionEngine(UDP_PORT, TCP_PORT);
             engine.start();
 
+            String lanIp = DashboardUI.getLocalLanIp();
             System.out.println("==================================================");
-            System.out.println("   SERVER DANG CHAY! SAN SANG PHUC VU");
-            System.out.println("   - Web Dashboard   : http://localhost:" + HTTP_PORT + "/dashboard.html");
-            System.out.println("   - UDP Ingestion   : Cong " + UDP_PORT);
-            System.out.println("   - TCP Ingestion   : Cong " + TCP_PORT);
-            System.out.println("   - WebSocket Stream: Cong " + WS_PORT + " (ws://localhost:" + WS_PORT + ")");
+            System.out.println("   SERVER DANG CHAY! SAN SANG PHUC VU MANG LAN    ");
+            System.out.println("   - Web Dashboard (Localhost): http://localhost:" + HTTP_PORT + "/dashboard.html");
+            System.out.println("   - Web Dashboard (Mang LAN) : http://" + lanIp + ":" + HTTP_PORT + "/dashboard.html");
+            System.out.println("   - Trang dang nhap test LAN : http://" + lanIp + ":" + HTTP_PORT + "/login.html");
+            System.out.println("   - UDP Ingestion (Syslog)   : Cong " + UDP_PORT + " (0.0.0.0:" + UDP_PORT + ")");
+            System.out.println("   - TCP Ingestion            : Cong " + TCP_PORT + " (0.0.0.0:" + TCP_PORT + ")");
+            System.out.println("   - WebSocket Stream         : Cong " + WS_PORT + " (ws://" + lanIp + ":" + WS_PORT + ")");
             System.out.println("==================================================");
 
             // Shutdown hook de don dep tai nguyen khi dung chuong trinh

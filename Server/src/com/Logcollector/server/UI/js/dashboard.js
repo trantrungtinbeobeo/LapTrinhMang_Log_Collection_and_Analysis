@@ -177,11 +177,12 @@
   function connectWebSocket() {
     try {
       const badge = document.querySelector(".demo-badge");
-      const ws = new WebSocket("ws://localhost:8085");
+      const wsHost = window.location.hostname || "localhost";
+      const ws = new WebSocket("ws://" + wsHost + ":8085");
 
       ws.onopen = () => {
         if (badge) {
-          badge.textContent = "● ĐÃ KẾT NỐI REALTIME (ws://localhost:8085)";
+          badge.textContent = "● ĐÃ KẾT NỐI REALTIME (ws://" + wsHost + ":8085)";
           badge.style.background = "#059669";
           badge.style.color = "#ffffff";
         }

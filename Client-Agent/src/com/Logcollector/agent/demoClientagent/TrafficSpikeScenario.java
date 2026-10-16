@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class TrafficSpikeScenario {
 
-    private static final String HOST = "127.0.0.1";
+    private static final String HOST = System.getProperty("server.host", "127.0.0.1");
     private static final int TCP_PORT = 9999;
     private static final int UDP_PORT = 514;
     private static final int DEFAULT_SPIKE_COUNT = 150;

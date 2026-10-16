@@ -100,8 +100,12 @@ public class DemoClientAgent {
     }
 
     private static void printBanner() {
+        String dev = com.Logcollector.agent.SyslogFormatter.getDeviceDescription();
+        String host = System.getProperty("server.host", "127.0.0.1");
         System.out.println("==================================================");
         System.out.println("        TRINH DIEU KHOEN DEMO CLIENT AGENT        ");
+        System.out.println("   [THIET BI MAY CLIENT]: " + dev);
+        System.out.println("   [SERVER LOG TIEP NHAN]: " + host + " (UDP: 514 / TCP: 9999)");
         System.out.println("==================================================");
     }
 }

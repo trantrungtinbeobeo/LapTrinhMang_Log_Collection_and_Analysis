@@ -16,8 +16,11 @@ public class LogParser {
         "WARNING", "NOTICE", "INFO", "DEBUG"
     };
 
+    private static final Pattern DEVICE_PATTERN = Pattern.compile("(?:device|Device|from device|Device\\s*')\\s*['\"]?([^'\"|\\]\\r\\n]+)['\"]?");
+    private static final Pattern IP_PATTERN = Pattern.compile("(?:\\b|from\\s+|rhost=|IP:\\s*|from\\s+IP\\s+)([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
+
     /**
-     * Hàm bóc tách (Parse) và chuẩn hóa (Normalize)
+     * Ham boc tach (Parse) va chuan hoa (Normalize)
      */
     public static LogEvent parse(String rawLog) {
         if (rawLog == null || rawLog.trim().isEmpty()) {
@@ -27,7 +30,7 @@ public class LogParser {
         Matcher matcher = PATTERN.matcher(rawLog.trim());
 
         if (matcher.matches()) {
-            // 2. NORMALIZATION (Chuẩn hóa) Priority -> Facility và Severity Level
+            // 2. NORMALIZATION (Chuan hoa) Priority -> Facility va Severity Level
             int pri = Integer.parseInt(matcher.group(1));
             int facility = pri / 8;
             int severityCode = pri % 8;
@@ -35,23 +38,76 @@ public class LogParser {
                                     ? SEVERITY_NAMES[severityCode] 
                                     : "UNKNOWN";
 
-            // Chuẩn hóa thời gian (Timestamp)
+            // Chuan hoa thoi gian (Timestamp)
             String rawTimestamp = matcher.group(2);
             String timestamp = (rawTimestamp != null && !rawTimestamp.isEmpty()) 
                                 ? rawTimestamp.trim() 
                                 : LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            // Chuẩn hóa IP và loại bỏ khoảng trắng thừa ở Message
-            String ip = matcher.group(3).trim();
+            // Chuan hoa IP, thiet bi va noi dung
+            String token = matcher.group(3).trim();
             String message = matcher.group(4).trim();
 
-            // Trả về đối tượng LogEvent đã chứa dữ liệu sạch
-            return new LogEvent(ip, timestamp, facility, severityLevel, message);
+            String ip = "127.0.0.1";
+            String device = "Network-Device";
+
+            if (token.matches("^[0-9]{1,3}(?:\\.[0-9]{1,3}){3}$")) {
+                ip = token;
+                device = extractDevice(message, null);
+            } else {
+                device = token.replace("_", " ");
+                Matcher ipMatcher = IP_PATTERN.matcher(message);
+                if (ipMatcher.find()) {
+                    ip = ipMatcher.group(1);
+                } else {
+                    ip = "127.0.0.1";
+                }
+            }
+
+            // Xac dinh nhom phan loai (Category)
+            String category = determineCategory(rawLog);
+
+            // Tra ve doi tuong LogEvent da chua du lieu day du
+            return new LogEvent(ip, device, category, timestamp, facility, severityLevel, message);
         } else {
-            return new LogEvent("127.0.0.1", 
+            String category = determineCategory(rawLog);
+            String device = extractDevice(rawLog, "Network-Host");
+            Matcher ipMatcher = IP_PATTERN.matcher(rawLog);
+            String ip = ipMatcher.find() ? ipMatcher.group(1) : "127.0.0.1";
+
+            return new LogEvent(ip, device, category, 
                                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 
                                 1, "INFO", rawLog.trim());
         }
+    }
+
+    public static String determineCategory(String text) {
+        if (text == null) return "APPLICATION";
+        String upper = text.toUpperCase();
+        if (upper.contains("PORT_SCAN") || upper.contains("BRUTE_FORCE") || upper.contains("ATTACK") || upper.contains("FIREWALL") || upper.contains("BLOCKED")) {
+            return "SECURITY";
+        }
+        if (upper.contains("LOGIN") || upper.contains("PASSWORD") || upper.contains("USER") || upper.contains("AUTHENTICAT") || upper.contains("SSH") || upper.contains("LOGOUT")) {
+            return "AUTH";
+        }
+        if (upper.contains("TRAFFIC") || upper.contains("SPIKE") || upper.contains("LATENCY") || upper.contains("BANDWIDTH") || upper.contains("TELEMETRY") || upper.contains("THROUGHPUT")) {
+            return "NETWORK";
+        }
+        if (upper.contains("CPU") || upper.contains("MEMORY") || upper.contains("DISK") || upper.contains("FAN") || upper.contains("POWER") || upper.contains("REBOOT") || upper.contains("INTERFACE")) {
+            return "SYSTEM";
+        }
+        return "APPLICATION";
+    }
+
+    public static String extractDevice(String rawLog, String fallback) {
+        if (rawLog != null) {
+            Matcher m = DEVICE_PATTERN.matcher(rawLog);
+            if (m.find()) {
+                String dev = m.group(1).trim();
+                if (!dev.isEmpty()) return dev;
+            }
+        }
+        return (fallback != null && !fallback.trim().isEmpty()) ? fallback : "Network-Device";
     }
 
     /**

@@ -20,7 +20,7 @@ public class SyslogFormatter {
     private final String procId;
 
     public SyslogFormatter() {
-        this("client-agent", "LogCollector",
+        this(detectHostname(), "LogCollector",
                 String.valueOf(ProcessHandle.current().pid()));
     }
 
@@ -28,6 +28,26 @@ public class SyslogFormatter {
         this.hostname = sanitizeHeader(hostname);
         this.appName = sanitizeHeader(appName);
         this.procId = sanitizeHeader(procId);
+    }
+
+    public static String detectHostname() {
+        try {
+            String host = java.net.InetAddress.getLocalHost().getHostName();
+            if (host != null && !host.trim().isEmpty() && !host.equalsIgnoreCase("localhost")) {
+                return host;
+            }
+        } catch (Exception ignored) {}
+        String envComputer = System.getenv("COMPUTERNAME");
+        if (envComputer != null && !envComputer.trim().isEmpty()) return envComputer;
+        String envHost = System.getenv("HOSTNAME");
+        if (envHost != null && !envHost.trim().isEmpty()) return envHost;
+        return "Device-" + System.getProperty("os.name", "Host").replaceAll("\\s+", "-");
+    }
+
+    public static String getDeviceDescription() {
+        String host = detectHostname();
+        String os = System.getProperty("os.name", "Unknown-OS");
+        return host + " (" + os + ")";
     }
 
     private int toSyslogSeverity(String severity) {
@@ -58,10 +78,13 @@ public class SyslogFormatter {
         String eventType = sanitizeHeader(event.getEventType());
         String message = sanitizeMessage(event.getMessage());
         int pri = calculatePri(event.getSeverity());
+        String dev = (event.getDevice() != null && !event.getDevice().trim().isEmpty())
+                ? sanitizeHeader(event.getDevice())
+                : hostname;
 
         return "<" + pri + ">1 "
                 + timestamp + " "
-                + hostname + " "
+                + dev + " "
                 + appName + " "
                 + procId + " "
                 + eventType + " "
@@ -79,10 +102,13 @@ public class SyslogFormatter {
         String message = sanitizeMessage(event.getMessage());
         String tag = appName + "[" + procId + "]:";
         int pri = calculatePri(event.getSeverity());
+        String dev = (event.getDevice() != null && !event.getDevice().trim().isEmpty())
+                ? sanitizeHeader(event.getDevice())
+                : hostname;
 
         return "<" + pri + ">"
                 + timestamp + " "
-                + hostname + " "
+                + dev + " "
                 + tag + " "
                 + sanitizeHeader(event.getEventType())
                 + " - "

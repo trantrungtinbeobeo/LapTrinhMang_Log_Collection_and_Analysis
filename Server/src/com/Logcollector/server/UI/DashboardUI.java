@@ -1,5 +1,6 @@
 package com.Logcollector.server.UI;
 
+import com.Logcollector.server.Core.LogQueue;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -11,12 +12,19 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Enumeration;
+import java.net.NetworkInterface;
+import java.net.InetAddress;
+import java.net.Inet4Address;
 
 /**
  * DashboardUI (Local Embedded Web Server Launcher):
  * Khoi dong may chu HTTP noi bo tai cong 8080 de phuc vu cac trang Web Dashboard,
  * Login, Register va Catalog san pham ma khong can cai them Web Server ngoai (Apache/Nginx/NodeJS).
  * Tu dong mo trinh duyet mac dinh cua may tinh khi khoi dong.
+ * Ho tro cac thiet bi khac trong cung mang Wi-Fi/LAN truy cap va nhan dien thiet bi.
  */
 public class DashboardUI {
 
@@ -40,13 +48,19 @@ public class DashboardUI {
     public void start() {
         try {
             httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+            httpServer.createContext("/api/login", new LoginApiHandler());
+            httpServer.createContext("/api/interaction", new InteractionApiHandler());
             httpServer.createContext("/", new StaticFileHandler(webRoot));
             httpServer.setExecutor(null); // Dung bo dieu phoi mac dinh
             httpServer.start();
 
+            String lanIp = getLocalLanIp();
+
             System.out.println("==================================================");
-            System.out.println("   WEB DASHBOARD DA SAN SANG TAI LOCALHOST        ");
-            System.out.println("   URL: http://localhost:" + port + "/dashboard.html");
+            System.out.println("   WEB DASHBOARD DA SAN SANG (LOCAL & MANG LAN)   ");
+            System.out.println("   - May chu cuc bo (Localhost): http://localhost:" + port + "/dashboard.html");
+            System.out.println("   - May khac cung mang LAN    : http://" + lanIp + ":" + port + "/dashboard.html");
+            System.out.println("   - Trang dang nhap test LAN  : http://" + lanIp + ":" + port + "/login.html");
             System.out.println("==================================================");
 
             // Tu dong mo trinh duyet neu he dieu hanh ho tro Desktop
@@ -146,6 +160,153 @@ public class DashboardUI {
             if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
             if (lower.endsWith(".ico")) return "image/x-icon";
             return "application/octet-stream";
+        }
+    }
+
+    /**
+     * Handler tiep nhan dang nhap tu trinh duyet Web cua cac thiet bi trong mang LAN
+     */
+    private static class LoginApiHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+
+            String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+            String userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
+            String device = parseDeviceFromUserAgent(userAgent);
+
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            boolean success = body.contains("\"success\":true") || body.contains("\"success\": true");
+
+            String email = "khach_demo";
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"email\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+            if (m.find()) {
+                email = m.group(1);
+            }
+
+            int pri = success ? 14 : 12; // 14: INFO, 12: WARNING
+            String eventType = success ? "LOGIN_SUCCESS" : "LOGIN_FAILED";
+            String now = Instant.now().toString();
+
+            String syslogMsg = String.format("<%d>1 %s %s LogCollector-Web - %s - Device '%s' [IP: %s] %s user '%s'",
+                    pri, now, device.replaceAll("[^a-zA-Z0-9.-]", "_"), eventType, device, clientIp,
+                    (success ? "logged in successfully as" : "failed password for"), email);
+
+            // Day vao hang doi log cua he thong
+            LogQueue.offer(syslogMsg);
+
+            String jsonResp = String.format("{\"status\":\"ok\",\"device\":\"%s\",\"ip\":\"%s\"}", device, clientIp);
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+    }
+
+    /**
+     * Handler tiep nhan tuong tac san pham / thiet bi tu trinh duyet Web
+     */
+    private static class InteractionApiHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+
+            String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+            String userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
+            String device = parseDeviceFromUserAgent(userAgent);
+
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String action = "VIEW_DEVICE";
+            String item = "Thiet bi mang";
+            java.util.regex.Matcher mAction = java.util.regex.Pattern.compile("\"type\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+            if (mAction.find()) action = mAction.group(1);
+            java.util.regex.Matcher mItem = java.util.regex.Pattern.compile("\"productName\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+            if (mItem.find()) item = mItem.group(1);
+
+            int pri = 14;
+            String now = Instant.now().toString();
+
+            String syslogMsg = String.format("<%d>1 %s %s LogCollector-Web - %s - Device '%s' [IP: %s] viewed product '%s'",
+                    pri, now, device.replaceAll("[^a-zA-Z0-9.-]", "_"), action, device, clientIp, item);
+
+            LogQueue.offer(syslogMsg);
+
+            String jsonResp = "{\"status\":\"ok\"}";
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+    }
+
+    /**
+     * Phan tich User-Agent de nhan dien loai thiet bi va he dieu hanh cua client
+     */
+    public static String parseDeviceFromUserAgent(String userAgent) {
+        if (userAgent == null || userAgent.trim().isEmpty()) {
+            return "Network-Device";
+        }
+        if (userAgent.contains("iPhone")) return "Apple iPhone (iOS)";
+        if (userAgent.contains("iPad")) return "Apple iPad (iPadOS)";
+        if (userAgent.contains("Android")) {
+            if (userAgent.contains("Samsung") || userAgent.contains("SM-")) return "Samsung Galaxy (Android)";
+            if (userAgent.contains("Xiaomi") || userAgent.contains("Redmi")) return "Xiaomi (Android)";
+            return "Android Smartphone";
+        }
+        if (userAgent.contains("Windows NT 10.0") || userAgent.contains("Windows NT 11.0")) {
+            if (userAgent.contains("Edg/")) return "Windows PC (Edge)";
+            if (userAgent.contains("Chrome/")) return "Windows PC (Chrome)";
+            if (userAgent.contains("Firefox/")) return "Windows PC (Firefox)";
+            return "Windows PC (Desktop)";
+        }
+        if (userAgent.contains("Macintosh") || userAgent.contains("Mac OS X")) {
+            return "Apple Mac / MacBook";
+        }
+        if (userAgent.contains("Linux")) return "Linux Workstation";
+        return "Web-Client";
+    }
+
+    /**
+     * Lay dia chi IP LAN thuc te cua may chu de cac may khac trong Wi-Fi/LAN co the ket noi
+     */
+    public static String getLocalLanIp() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) continue;
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        String host = addr.getHostAddress();
+                        if (!host.startsWith("127.")) {
+                            return host;
+                        }
+                    }
+                }
+            }
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "127.0.0.1";
         }
     }
 

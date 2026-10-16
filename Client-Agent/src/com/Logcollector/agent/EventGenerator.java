@@ -15,13 +15,22 @@ public class EventGenerator {
         private final String severity;
         private final String eventType;
         private final String message;
+        private final String device;
+        private final String category;
 
         public LogEvent(String timestamp, String severity,
                         String eventType, String message) {
+            this(timestamp, severity, eventType, message, SyslogFormatter.detectHostname(), determineCategory(eventType));
+        }
+
+        public LogEvent(String timestamp, String severity,
+                        String eventType, String message, String device, String category) {
             this.timestamp = timestamp;
             this.severity = severity;
             this.eventType = eventType;
             this.message = message;
+            this.device = (device != null && !device.trim().isEmpty()) ? device : SyslogFormatter.detectHostname();
+            this.category = (category != null && !category.trim().isEmpty()) ? category : determineCategory(eventType);
         }
 
         public String getTimestamp() {
@@ -39,6 +48,24 @@ public class EventGenerator {
         public String getMessage() {
             return message;
         }
+
+        public String getDevice() {
+            return device;
+        }
+
+        public String getCategory() {
+            return category;
+        }
+    }
+
+    public static String determineCategory(String eventType) {
+        if (eventType == null) return "APPLICATION";
+        String upper = eventType.toUpperCase();
+        if (upper.contains("LOGIN") || upper.contains("AUTH")) return "AUTH";
+        if (upper.contains("PORT_SCAN") || upper.contains("ATTACK") || upper.contains("BRUTE_FORCE")) return "SECURITY";
+        if (upper.contains("TRAFFIC") || upper.contains("SPIKE") || upper.contains("TELEMETRY") || upper.contains("LATENCY") || upper.contains("POLL")) return "NETWORK";
+        if (upper.contains("DEVICE") || upper.contains("CPU") || upper.contains("SYSTEM") || upper.contains("CONFIG")) return "SYSTEM";
+        return "APPLICATION";
     }
 
     private static final String[] SEVERITIES = {

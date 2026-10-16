@@ -78,13 +78,17 @@
       at: Date.now(),
       severity: severity,
       ip: liveEvent.ip || "127.0.0.1",
+      device: liveEvent.device || "Network-Device",
+      category: liveEvent.category || "APPLICATION",
       source: "realtime",
-      type: liveEvent.alertType || liveEvent.type || "LOG_RECEIVED",
-      message: liveEvent.message || liveEvent.raw || "Live log received"
+      type: liveEvent.category || liveEvent.alertType || liveEvent.type || "LOG_RECEIVED",
+      message: liveEvent.message || liveEvent.raw || "Live log received",
+      raw: liveEvent.raw
     };
     if (liveEvent.type === "ALERT" || liveEvent.alertType) {
       item.alertTitle = liveEvent.alertType === "BRUTE_FORCE" ? "Phát hiện Brute-Force mật khẩu" : "Phát hiện quét cổng (Port Scan)";
       item.severity = "CRITICAL";
+      item.category = "SECURITY";
     }
     additions.unshift(item);
     if (additions.length > 500) additions.pop();
