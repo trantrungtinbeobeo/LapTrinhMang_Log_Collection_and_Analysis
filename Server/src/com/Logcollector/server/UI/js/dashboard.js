@@ -23,23 +23,6 @@
     container.replaceChildren(message);
   }
 
-  function renderProducts(events) {
-    const container = byId("recent-products");
-    if (!container) return;
-    if (!events.length) {
-      emptyList(container, "Chưa có lượt xem thiết bị trong 5 phút gần nhất.", "li");
-      return;
-    }
-    container.replaceChildren(...events.map(event => {
-      const item = document.createElement("li");
-      const name = document.createElement("strong");
-      name.textContent = event.productName || event.productId || "Thiết bị demo";
-      const details = document.createElement("span");
-      details.textContent = `${event.actor || "Kỹ thuật viên"} · ${time.format(event.at)}`;
-      item.append(name, details);
-      return item;
-    }));
-  }
 
   function renderAlerts(events) {
     const container = byId("security-alerts");
@@ -96,9 +79,7 @@
     const snapshot = window.DashboardData.getSnapshot(scope.value);
     const values = {
       "total-logs": snapshot.total, "current-rate": snapshot.current, "total-ips": snapshot.ipCount,
-      "total-alerts": snapshot.alerts.length, "traffic-current": snapshot.current, "peak-rate": snapshot.peak,
-      "register-count": snapshot.interactions.REGISTER_SUCCESS, "login-count": snapshot.interactions.LOGIN_SUCCESS,
-      "failed-count": snapshot.interactions.LOGIN_FAILED, "click-count": snapshot.interactions.PRODUCT_CLICK
+      "total-alerts": snapshot.alerts.length, "traffic-current": snapshot.current, "peak-rate": snapshot.peak
     };
     Object.entries(values).forEach(([id, value]) => {
       const el = byId(id);
@@ -122,7 +103,6 @@
       if (sevChartEl && sevLegendEl) {
         window.DashboardCharts.drawSeverity(sevChartEl, sevLegendEl, snapshot.counts);
       }
-      renderProducts(snapshot.recentProducts);
       renderAlerts(snapshot.alerts);
       renderIps(snapshot.topIps);
     }

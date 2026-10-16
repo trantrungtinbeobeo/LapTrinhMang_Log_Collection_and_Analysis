@@ -101,8 +101,18 @@ public class TrafficSpikeScenario {
                             + (useTcp ? "TCP" : "UDP") + " -> " + ev.getMessage());
                 }
 
+                // Giãn cách ngắn 10ms để tránh cạn kiệt ephemeral port socket trên Windows
+                // và giúp biểu đồ Throughput Wave trên Dashboard hiển thị sóng dâng trào trực quan
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ignored) {}
+
             } catch (IOException e) {
                 System.err.println("[LOI TRUYEN TAI #" + logIndex + "]: " + e.getMessage());
+                if (e instanceof java.net.ConnectException) {
+                    System.err.println("   -> [CHU Y]: Khong the ket noi toi Server!");
+                    System.err.println("   -> Vui long khoi dong ServerMain truoc de mo cong UDP " + UDP_PORT + " va TCP " + TCP_PORT + ".");
+                }
                 System.err.println("Dung gui de bao toan so log con lai trong Queue: " + queue.size());
                 break;
             }
