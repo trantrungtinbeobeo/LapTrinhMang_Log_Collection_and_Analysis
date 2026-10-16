@@ -17,11 +17,12 @@ public class DemoClientAgent {
         }
 
         printBanner();
-        System.out.println("Vui long chon kich ban demo ban muon chay (1 - 4):");
+        System.out.println("Vui long chon kich ban demo ban muon chay (1 - 5):");
         System.out.println("   [1] Kich ban Dang nhap (Delay 3s test ngat mang & Queue)");
         System.out.println("   [2] Kich ban Nguoi dung chon xem & mua san pham (Web Traffic)");
         System.out.println("   [3] Kich ban Dot bien luu luong (Traffic Spike / Flash Sale)");
         System.out.println("   [4] Kich ban Tan cong an ninh (Brute-force & Port scan alert)");
+        System.out.println("   [5] Kich ban Dataset that OpenSSH_2k (Bao mat & Kiem thu chiu tai)");
         System.out.println("   [0] Thoat chuong trinh");
         System.out.print("👉 Lua chon cua ban: ");
 
@@ -44,6 +45,14 @@ public class DemoClientAgent {
                     break;
                 case "4":
                     CyberAttackScenario.main(new String[]{});
+                    break;
+                case "5":
+                    System.out.println("\nChon che do kiem thu Dataset:");
+                    System.out.println("   [1] Phat hien tan cong Brute-force tu hacker that (IP 112.95.230.3)");
+                    System.out.println("   [2] Kiem thu chiu tai da luong (Stress Test 300 log dồn dập)");
+                    System.out.print("👉 Che do: ");
+                    String subChoice = scanner.hasNextLine() ? scanner.nextLine().trim() : "1";
+                    DatasetReplayScenario.main(new String[]{subChoice});
                     break;
                 case "0":
                     System.out.println("Da thoat chuong trinh demo.");
@@ -76,6 +85,12 @@ public class DemoClientAgent {
             case "4":
             case "attack":
                 CyberAttackScenario.main(args);
+                break;
+            case "5":
+            case "dataset":
+            case "real":
+                String[] datasetArgs = args.length > 1 ? new String[]{args[1]} : new String[]{};
+                DatasetReplayScenario.main(datasetArgs);
                 break;
             default:
                 System.out.println("Khong tim thay kich ban '" + arg + "'. Chay Kich ban 2...");
