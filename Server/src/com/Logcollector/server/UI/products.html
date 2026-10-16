@@ -19,10 +19,15 @@
     <div class="container header-inner">
       <div class="row"><a class="brand" href="products.html"><img src="assets/images/logo.svg" alt="" width="36" height="40">Demo Store</a><span class="badge demo-badge"><span class="dot"></span>Bản demo — dữ liệu mô phỏng</span></div>
       <nav class="nav-links" aria-label="Điều hướng cửa hàng"><a href="products.html" aria-current="page">Sản phẩm</a><a href="dashboard.html">Dashboard demo</a><a href="login.html">Tài khoản demo</a></nav>
-      <details class="account" id="account-menu">
-        <summary aria-label="Menu tài khoản demo"><span class="account-name"><strong id="user-name">Khách demo</strong><span class="muted" id="user-email">Chưa đăng nhập demo</span></span><span class="avatar" id="user-avatar" aria-hidden="true">K</span><span aria-hidden="true">⌄</span></summary>
-        <div class="account-menu"><p class="small muted">Phiên trải nghiệm frontend</p><a href="login.html" class="btn btn-outline" id="login-link">Đăng nhập demo</a><button type="button" class="btn" id="logout-button" hidden>Đăng xuất</button></div>
-      </details>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <button type="button" class="btn btn-outline btn-small" id="open-cart-btn" style="display:flex; align-items:center; gap:6px; font-weight:600;" aria-label="Xem giỏ hàng">
+          <span>🛒</span> Giỏ hàng (<strong id="cart-total-badge">0</strong>)
+        </button>
+        <details class="account" id="account-menu">
+          <summary aria-label="Menu tài khoản demo"><span class="account-name"><strong id="user-name">Khách demo</strong><span class="muted" id="user-email">Chưa đăng nhập demo</span></span><span class="avatar" id="user-avatar" aria-hidden="true">K</span><span aria-hidden="true">⌄</span></summary>
+          <div class="account-menu"><p class="small muted">Phiên trải nghiệm frontend</p><a href="login.html" class="btn btn-outline" id="login-link">Đăng nhập demo</a><button type="button" class="btn" id="logout-button" hidden>Đăng xuất</button></div>
+        </details>
+      </div>
     </div>
   </header>
   <main id="main" class="container store-main">
@@ -47,7 +52,6 @@
           <button type="button" data-category="phone" aria-pressed="false">Điện thoại</button>
           <button type="button" data-category="accessory" aria-pressed="false">Phụ kiện</button>
         </div>
-        <button type="button" id="btn-simulate-shopping-spike" class="btn btn-small" style="background:#1e293b; color:#38bdf8; border:1px solid #38bdf8;" title="Mô phỏng đợt mua sắm dồn dập phát sinh 15 gói tin telemetry lên ServerMain">⚡ Mô phỏng lưu lượng (+15 log)</button>
       </div>
     </div>
     <p class="sr-only" id="product-count" role="status" aria-live="polite"></p>
@@ -64,12 +68,42 @@
         <div class="dialog-price"><span class="small muted">Giá niêm yết</span><strong id="detail-price"></strong></div>
         <div><h3>Thông số nổi bật</h3><p class="dialog-specs" id="detail-description"></p></div>
         <div class="dialog-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="btn btn-primary" id="btn-add-to-cart" type="button" style="background:#059669; border-color:#059669; color:#fff;">🛒 Thêm vào giỏ (+4 log)</button>
-          <button class="btn btn-warning" id="btn-checkout-now" type="button" style="background:#d97706; border-color:#d97706; color:#fff;">⚡ Mua ngay (+4 log)</button>
+          <button class="btn btn-primary" id="btn-add-to-cart" type="button" style="background:#059669; border-color:#059669; color:#fff;">🛒 Thêm vào giỏ hàng</button>
+          <button class="btn btn-warning" id="btn-checkout-now" type="button" style="background:#d97706; border-color:#d97706; color:#fff;">⚡ Thanh toán ngay</button>
           <button class="btn" type="button" data-close-dialog>Đóng</button>
         </div>
         <p class="small muted" id="modal-telemetry-notice" style="margin-top: 8px; color: #0284c7; min-height: 18px;"></p>
       </div>
+    </div>
+  </dialog>
+  <dialog class="cart-dialog" id="cart-dialog" aria-labelledby="cart-dialog-title">
+    <div class="row between dialog-header">
+      <span class="badge"><span class="dot"></span>Giỏ hàng của bạn</span>
+      <button class="icon-btn" type="button" id="close-cart-dialog" aria-label="Đóng giỏ hàng">×</button>
+    </div>
+    <div class="cart-dialog-body" style="padding: 24px;">
+      <h2 id="cart-dialog-title" style="margin-bottom: 16px; font-size: 20px;">Danh sách sản phẩm đã chọn</h2>
+      <div id="cart-empty-view" style="text-align: center; padding: 32px 16px; color: var(--muted);" hidden>
+        <p style="font-size: 36px; margin-bottom: 8px;">🛒</p>
+        <p>Giỏ hàng của bạn hiện đang trống.</p>
+        <p class="small">Hãy chọn một sản phẩm trong danh mục và bấm "Thêm vào giỏ hàng" để trải nghiệm luồng sinh log thực tế.</p>
+      </div>
+      <div id="cart-content-view">
+        <div class="cart-items-list" id="cart-items-list"></div>
+        <div class="cart-summary" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; gap: 12px;">
+          <div>
+            <span class="small muted">Tổng số tiền thanh toán</span>
+            <div style="font-size: 22px; font-weight: 700; color: var(--primary);" id="cart-total-price">0 VNĐ</div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-outline" id="btn-clear-cart">Xóa giỏ</button>
+            <button type="button" class="btn btn-primary" id="btn-cart-checkout" style="background: #059669; border-color: #059669; color: #fff;">
+              ⚡ Thanh toán đơn hàng
+            </button>
+          </div>
+        </div>
+      </div>
+      <p class="small muted" id="cart-telemetry-notice" style="margin-top: 14px; min-height: 18px; color: #0284c7;"></p>
     </div>
   </dialog>
   <footer class="store-footer">

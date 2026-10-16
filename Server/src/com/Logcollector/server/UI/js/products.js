@@ -219,26 +219,217 @@
   modalImage.referrerPolicy = "no-referrer";
   modalImage.addEventListener("error", fallbackImage);
 
-  function dispatchProductViewPipeline(product) {
-    const steps = [
-      { type: "VIEW_PRODUCT", delay: 0, lat: 18 },
-      { type: "INVENTORY_CHECK", delay: 35, lat: 24 },
-      { type: "RECOMMENDATION", delay: 70, lat: 32 },
-      { type: "MEDIA_ASSET", delay: 105, lat: 15 },
-      { type: "TELEMETRY_PING", delay: 140, lat: 19 }
-    ];
-    steps.forEach(step => {
-      setTimeout(() => {
-        sendTelemetryEvent(step.type, product, step.lat, 1);
-      }, step.delay);
-    });
-    setTimeout(() => {
-      const modalNotice = document.getElementById("modal-telemetry-notice");
-      if (modalNotice) modalNotice.textContent = `✓ Đã phát sinh 5 gói tin telemetry (${product.id}) đẩy lên ServerMain thành công!`;
-    }, 200);
+  // Quan ly Gio hang (Cart State Management)
+  const CART_STORAGE_KEY = "demo_store_cart_v1";
+
+  function getCartItems() {
+    try {
+      const raw = localStorage.getItem(CART_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
   }
 
-  // Delegated handler: click card -> open dialog -> dispatch 5 telemetry logs
+  function saveCartItems(items) {
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {}
+    updateCartBadge();
+  }
+
+  function updateCartBadge() {
+    const items = getCartItems();
+    const totalCount = items.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    const badge = document.getElementById("cart-total-badge");
+    if (badge) badge.textContent = String(totalCount);
+  }
+
+  function addItemToCart(product) {
+    if (!product) return;
+    const items = getCartItems();
+    const existing = items.find(item => item.id === product.id);
+    if (existing) {
+      existing.quantity = (existing.quantity || 1) + 1;
+    } else {
+      items.push({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image: product.image,
+        categoryName: product.categoryName,
+        quantity: 1
+      });
+    }
+    saveCartItems(items);
+  }
+
+  function updateItemQuantity(productId, delta) {
+    let items = getCartItems();
+    const item = items.find(i => i.id === productId);
+    if (!item) return;
+    item.quantity = (item.quantity || 1) + delta;
+    if (item.quantity <= 0) {
+      items = items.filter(i => i.id !== productId);
+    }
+    saveCartItems(items);
+    renderCartView();
+  }
+
+  function removeItemFromCart(productId) {
+    let items = getCartItems();
+    items = items.filter(i => i.id !== productId);
+    saveCartItems(items);
+    renderCartView();
+  }
+
+  function clearCart() {
+    saveCartItems([]);
+    renderCartView();
+  }
+
+  function renderCartView() {
+    const items = getCartItems();
+    const emptyView = document.getElementById("cart-empty-view");
+    const contentView = document.getElementById("cart-content-view");
+    const listEl = document.getElementById("cart-items-list");
+    const totalEl = document.getElementById("cart-total-price");
+
+    if (items.length === 0) {
+      if (emptyView) emptyView.hidden = false;
+      if (contentView) contentView.hidden = true;
+      if (totalEl) totalEl.textContent = "0 VNĐ";
+      return;
+    }
+
+    if (emptyView) emptyView.hidden = true;
+    if (contentView) contentView.hidden = false;
+
+    let totalPrice = 0;
+    if (listEl) {
+      listEl.innerHTML = "";
+      items.forEach(item => {
+        const itemTotal = item.price * (item.quantity || 1);
+        totalPrice += itemTotal;
+
+        const row = document.createElement("div");
+        row.className = "cart-item-row";
+
+        const info = document.createElement("div");
+        info.className = "cart-item-info";
+
+        const nameEl = document.createElement("div");
+        nameEl.className = "cart-item-name";
+        nameEl.textContent = item.name;
+
+        const priceEl = document.createElement("div");
+        priceEl.className = "cart-item-price";
+        priceEl.textContent = `${price(item.price)} × ${item.quantity} = ${price(itemTotal)}`;
+
+        info.append(nameEl, priceEl);
+
+        const controls = document.createElement("div");
+        controls.className = "cart-item-controls";
+
+        const decBtn = document.createElement("button");
+        decBtn.type = "button";
+        decBtn.className = "cart-qty-btn";
+        decBtn.textContent = "-";
+        decBtn.title = "Giảm số lượng";
+        decBtn.addEventListener("click", () => updateItemQuantity(item.id, -1));
+
+        const qtyVal = document.createElement("span");
+        qtyVal.className = "cart-qty-value";
+        qtyVal.textContent = item.quantity;
+
+        const incBtn = document.createElement("button");
+        incBtn.type = "button";
+        incBtn.className = "cart-qty-btn";
+        incBtn.textContent = "+";
+        incBtn.title = "Tăng số lượng";
+        incBtn.addEventListener("click", () => updateItemQuantity(item.id, 1));
+
+        const remBtn = document.createElement("button");
+        remBtn.type = "button";
+        remBtn.className = "cart-remove-btn";
+        remBtn.textContent = "Xóa";
+        remBtn.title = "Xóa sản phẩm khỏi giỏ";
+        remBtn.addEventListener("click", () => removeItemFromCart(item.id));
+
+        controls.append(decBtn, qtyVal, incBtn, remBtn);
+        row.append(info, controls);
+        listEl.append(row);
+      });
+    }
+
+    if (totalEl) totalEl.textContent = price(totalPrice);
+  }
+
+  // Khoi tao hien thi so dem tren badge gio hang
+  updateCartBadge();
+
+  // Hop thoai Gio hang
+  const cartDialog = document.getElementById("cart-dialog");
+  const openCartBtn = document.getElementById("open-cart-btn");
+  const closeCartBtn = document.getElementById("close-cart-dialog");
+  const clearCartBtn = document.getElementById("btn-clear-cart");
+  const checkoutCartBtn = document.getElementById("btn-cart-checkout");
+
+  if (openCartBtn && cartDialog) {
+    openCartBtn.addEventListener("click", () => {
+      renderCartView();
+      cartDialog.showModal();
+      document.body.classList.add("modal-open");
+    });
+  }
+
+  if (closeCartBtn && cartDialog) {
+    closeCartBtn.addEventListener("click", () => {
+      cartDialog.close();
+      document.body.classList.remove("modal-open");
+    });
+  }
+
+  if (cartDialog) {
+    cartDialog.addEventListener("click", event => {
+      if (event.target === cartDialog) {
+        cartDialog.close();
+        document.body.classList.remove("modal-open");
+      }
+    });
+  }
+
+  if (clearCartBtn) {
+    clearCartBtn.addEventListener("click", () => {
+      if (confirm("Bạn có chắc chắn muốn xóa toàn bộ sản phẩm trong giỏ hàng?")) {
+        clearCart();
+      }
+    });
+  }
+
+  if (checkoutCartBtn) {
+    checkoutCartBtn.addEventListener("click", async () => {
+      const items = getCartItems();
+      if (items.length === 0) return;
+      const totalCount = items.reduce((s, i) => s + (i.quantity || 1), 0);
+      const notice = document.getElementById("cart-telemetry-notice");
+      if (notice) notice.textContent = "⚡ Đang xử lý giao dịch thanh toán đơn hàng lên ServerMain...";
+
+      // Thao tac nguoi dung that: Sinh DUNG 1 LOG CHECKOUT_ORDER duy nhat
+      await sendTelemetryEvent("CHECKOUT_ORDER", items[0], 28, 1);
+      clearCart();
+
+      if (notice) notice.textContent = `✓ Đã thanh toán thành công đơn hàng (${totalCount} món)! Đã phát sinh 1 log CHECKOUT_ORDER tới ServerMain.`;
+      setTimeout(() => {
+        if (cartDialog && cartDialog.open) cartDialog.close();
+        document.body.classList.remove("modal-open");
+      }, 1200);
+    });
+  }
+
+  // Delegated handler: click card -> mo dialog xem chi tiet -> sinh DUNG 1 LOG VIEW_PRODUCT
   grid.addEventListener("click", event => {
     const button = event.target.closest("button[data-product-id]");
     if (!button || !grid.contains(button) || dialog.open) return;
@@ -252,81 +443,51 @@
     document.getElementById("detail-price").textContent = price(product.price);
     document.getElementById("detail-description").textContent = product.description;
     const modalNotice = document.getElementById("modal-telemetry-notice");
-    if (modalNotice) modalNotice.textContent = "⚡ Đang phát sinh luồng telemetry xem chi tiết thiết bị lên Server...";
+    if (modalNotice) modalNotice.textContent = "⚡ Đang truyền 1 log xem chi tiết thiết bị lên Server...";
     setImage(modalImage, product);
     dialog.showModal();
     document.body.classList.add("modal-open");
     DemoData.recordProductClick(product.id);
     renderClickCount();
 
-    // Phat sinh luu luong telemetry thuc te
-    dispatchProductViewPipeline(product);
+    // Sinh DUNG 1 LOG duy nhat: VIEW_PRODUCT
+    sendTelemetryEvent("VIEW_PRODUCT", product, 18, 1).then(() => {
+      if (modalNotice) modalNotice.textContent = `✓ Đã phát sinh 1 log VIEW_PRODUCT (${product.id}) tới ServerMain thành công!`;
+    });
   });
 
-  // Nut "Them vao gio hang" trong Dialog
+  // Nut "Them vao gio hang" trong Dialog -> sinh DUNG 1 LOG ADD_TO_CART
   const btnAddToCart = document.getElementById("btn-add-to-cart");
   if (btnAddToCart) {
-    btnAddToCart.addEventListener("click", () => {
+    btnAddToCart.addEventListener("click", async () => {
       if (!activeProduct) return;
+      addItemToCart(activeProduct);
       const modalNotice = document.getElementById("modal-telemetry-notice");
-      if (modalNotice) modalNotice.textContent = "🛒 Đang cập nhật giỏ hàng và đồng bộ lên Server...";
-      const cartSteps = [
-        { type: "ADD_TO_CART", delay: 0, lat: 25 },
-        { type: "CART_UPDATE", delay: 35, lat: 19 },
-        { type: "PROMO_CHECK", delay: 70, lat: 22 },
-        { type: "CHECKOUT_INTENT", delay: 105, lat: 16 }
-      ];
-      cartSteps.forEach(s => {
-        setTimeout(() => sendTelemetryEvent(s.type, activeProduct, s.lat, 1), s.delay);
-      });
-      setTimeout(() => {
-        if (modalNotice) modalNotice.textContent = `✓ Đã thêm "${activeProduct.name}" vào giỏ hàng (+4 gói tin tới ServerMain)!`;
-      }, 160);
+      if (modalNotice) modalNotice.textContent = `🛒 Đang thêm "${activeProduct.name}" vào giỏ hàng...`;
+
+      // Sinh DUNG 1 LOG duy nhat: ADD_TO_CART
+      await sendTelemetryEvent("ADD_TO_CART", activeProduct, 22, 1);
+      if (modalNotice) modalNotice.textContent = `✓ Đã thêm "${activeProduct.name}" vào giỏ hàng (+1 log ADD_TO_CART tới ServerMain)!`;
     });
   }
 
-  // Nut "Mua ngay" trong Dialog
+  // Nut "Thanh toan ngay" trong Dialog -> sinh DUNG 1 LOG CHECKOUT_ORDER va mo gio hang
   const btnCheckoutNow = document.getElementById("btn-checkout-now");
   if (btnCheckoutNow) {
-    btnCheckoutNow.addEventListener("click", () => {
+    btnCheckoutNow.addEventListener("click", async () => {
       if (!activeProduct) return;
+      addItemToCart(activeProduct);
       const modalNotice = document.getElementById("modal-telemetry-notice");
-      if (modalNotice) modalNotice.textContent = "⚡ Đang khởi tạo phiên thanh toán nhanh...";
-      const checkoutSteps = [
-        { type: "CHECKOUT_ORDER", delay: 0, lat: 32 },
-        { type: "PAYMENT_GATEWAY", delay: 40, lat: 45 },
-        { type: "ORDER_CREATED", delay: 80, lat: 28 },
-        { type: "TELEMETRY_PING", delay: 120, lat: 18 }
-      ];
-      checkoutSteps.forEach(s => {
-        setTimeout(() => sendTelemetryEvent(s.type, activeProduct, s.lat, 1), s.delay);
-      });
-      setTimeout(() => {
-        if (modalNotice) modalNotice.textContent = `✓ Đã tạo đơn hàng "${activeProduct.name}" thành công (+4 gói tin tới ServerMain)!`;
-      }, 170);
-    });
-  }
+      if (modalNotice) modalNotice.textContent = "⚡ Đang khởi tạo phiên thanh toán...";
 
-  // Nut "Mo phong luu luong mua sam cuc bo (+15 log)"
-  const btnShoppingSpike = document.getElementById("btn-simulate-shopping-spike");
-  if (btnShoppingSpike) {
-    btnShoppingSpike.addEventListener("click", () => {
-      btnShoppingSpike.disabled = true;
-      btnShoppingSpike.textContent = "⚡ Đang bắn lưu lượng...";
-      const prods = catalog.slice(0, 5);
-      let count = 0;
-      for (let i = 0; i < 15; i++) {
-        const prod = prods[i % prods.length];
-        const action = i % 3 === 0 ? "VIEW_PRODUCT" : (i % 3 === 1 ? "ADD_TO_CART" : "CHECKOUT_ORDER");
-        setTimeout(() => {
-          sendTelemetryEvent(action, prod, 15 + Math.floor(Math.random() * 25), 1);
-          count++;
-          if (count === 15) {
-            btnShoppingSpike.disabled = false;
-            btnShoppingSpike.textContent = "⚡ Mô phỏng lưu lượng (+15 log)";
-          }
-        }, i * 25);
-      }
+      // Sinh DUNG 1 LOG duy nhat: CHECKOUT_ORDER
+      await sendTelemetryEvent("CHECKOUT_ORDER", activeProduct, 28, 1);
+      if (modalNotice) modalNotice.textContent = `✓ Đã tạo đơn hàng "${activeProduct.name}" thành công (+1 log CHECKOUT_ORDER tới ServerMain)!`;
+      setTimeout(() => {
+        if (dialog && dialog.open) dialog.close();
+        document.body.classList.remove("modal-open");
+        if (openCartBtn) openCartBtn.click();
+      }, 700);
     });
   }
 
