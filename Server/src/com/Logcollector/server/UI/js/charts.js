@@ -270,19 +270,22 @@
     function calcMetrics(u) {
       let lat, impact, err404;
       if (u <= 80) {
-        lat = 18 + u * 0.9;
-        impact = (u / 80.0) * 8.0;
-        err404 = 0.05 + (u / 80.0) * 0.45;
+        const ratio = u / 80.0;
+        lat = 18 + ratio * 67;
+        impact = ratio * 8.0;
+        err404 = 0.05 + ratio * 0.45;
       } else if (u <= 150) {
         const extra = u - 80;
-        lat = 90 + Math.pow(extra, 1.45) * 2.2;
-        impact = 10.0 + (extra / 70.0) * 50.0;
-        err404 = 1.0 + (extra / 70.0) * 12.0;
+        const ratio = extra / 70.0;
+        lat = 85 + Math.pow(ratio, 1.5) * 365;
+        impact = 8.0 + Math.pow(ratio, 1.2) * 52.0;
+        err404 = 0.5 + Math.pow(ratio, 1.3) * 11.5;
       } else {
         const extra = u - 150;
-        lat = 450 + Math.pow(extra, 1.6) * 7.5;
-        impact = 65.0 + (extra / 50.0) * 30.0;
-        err404 = 15.0 + (extra / 50.0) * 20.0;
+        const ratio = extra / 50.0;
+        lat = 450 + Math.pow(ratio, 1.4) * 700;
+        impact = 60.0 + Math.pow(ratio, 1.1) * 35.0;
+        err404 = 12.0 + Math.pow(ratio, 1.2) * 23.0;
       }
       return {
         users: u,

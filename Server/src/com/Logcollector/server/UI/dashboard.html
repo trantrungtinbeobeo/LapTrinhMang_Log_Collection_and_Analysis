@@ -51,18 +51,25 @@
       </div>
     </div>
 
-    <!-- Bo chon nguon du lieu -->
-    <div class="row between wrap data-toolbar">
-      <div class="field scope-field">
+    <!-- Bo chon nguon du lieu & Thao tac log -->
+    <div class="row between wrap data-toolbar" style="align-items: center; gap: 12px;">
+      <div class="field scope-field" style="margin: 0;">
         <label for="data-scope">Nguồn dữ liệu toàn dashboard</label>
         <select id="data-scope">
           <option value="realtime" selected>● Log thời gian thực (Server WebSocket &amp; Client-Agent)</option>
         </select>
       </div>
-      <p class="small muted">Toàn bộ Dashboard hiển thị 100% dữ liệu thực tế thu thập qua UDP 514, TCP 9999, Web Store &amp; WebSocket thời gian thực.</p>
+      <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+        <button id="btn-clear-all-logs" class="btn btn-danger btn-small" type="button" title="Xóa toàn bộ log khỏi giao diện Dashboard">
+          🗑️ Xóa toàn bộ log
+        </button>
+      </div>
+      <p class="small muted" style="width: 100%; margin: 6px 0 0;">
+        Toàn bộ Dashboard hiển thị 100% dữ liệu thực tế thu thập qua UDP 514, TCP 9999, Web Store &amp; WebSocket thời gian thực.
+      </p>
     </div>
 
-    <!-- 4 The chi so chinh (Metrics) -->
+    <!-- 5 The chi so chinh (Metrics) -->
     <section class="metrics-grid" aria-label="Chỉ số trong 5 phút">
       <article class="card metric">
         <span class="metric-symbol" aria-hidden="true">≡</span>
@@ -81,6 +88,12 @@
         <h2>Địa chỉ IP nguồn</h2>
         <strong id="total-ips">—</strong>
         <p class="small muted">Số thiết bị/hacker gửi log</p>
+      </article>
+      <article class="card metric">
+        <span class="metric-symbol" aria-hidden="true" style="color: #10b981;">👥</span>
+        <h2>Người dùng đang online</h2>
+        <strong><span id="active-online-users">1</span><small> người (theo IP)</small></strong>
+        <p class="small muted">Đang hoạt động trong thời gian thực</p>
       </article>
       <article class="card metric metric-alert">
         <span class="metric-symbol" aria-hidden="true">!</span>
