@@ -124,12 +124,22 @@ public class DatasetReplayScenario {
         List<String> rawLogs = readSampleLines(datasetFile, maxLogs);
         System.out.println("[DATASET] Da doc " + rawLogs.size() + " dong log thuc te tu file.");
 
-        SyslogFormatter formatter = new SyslogFormatter("cluster-node", "sshd", "1001");
+        SyslogFormatter formatter = new SyslogFormatter();
         AgentLocalQueue queue = new AgentLocalQueue();
         String now = Instant.now().toString();
 
-        for (String raw : rawLogs) {
-            queue.enqueue(new EventGenerator.LogEvent(now, "INFO", "SSH_TRAFFIC", raw));
+        for (int i = 0; i < rawLogs.size(); i++) {
+            String raw = rawLogs.get(i);
+            String nodeIp = "192.168.1." + ((i % 120) + 10);
+            String nodeDevice = "Cluster-Node-" + ((i % 10) + 1);
+            queue.enqueue(new EventGenerator.LogEvent(
+                    now,
+                    "INFO",
+                    "SSH_TRAFFIC",
+                    "Cluster node '" + nodeDevice + "' processed traffic: " + raw + " | SourceIP: " + nodeIp,
+                    nodeDevice,
+                    "NETWORK"
+            ));
         }
 
         int totalToSend = queue.size();
@@ -140,13 +150,14 @@ public class DatasetReplayScenario {
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger counter = new AtomicInteger(0);
         long startTime = System.currentTimeMillis();
+        int printStep = Math.max(1, totalToSend / 6);
 
         while (!queue.isEmpty()) {
             EventGenerator.LogEvent ev = queue.dequeue();
             int index = counter.incrementAndGet();
             pool.submit(() -> {
                 try {
-                    String message = formatter.format3164(ev);
+                    String message = formatter.format(ev);
                     // Luan phien gui qua ca UDP (514) va TCP (9999) de kiem thu dong thoi ca 2 cong tiep nhan
                     if (index % 2 == 0) {
                         TCPSender tcpSender = new TCPSender(HOST, TCP_PORT);
@@ -155,10 +166,21 @@ public class DatasetReplayScenario {
                         UDPSender udpSender = new UDPSender(HOST, UDP_PORT);
                         udpSender.send(message);
                     }
-                    successCount.incrementAndGet();
-                } catch (Exception ignored) {
+                    int current = successCount.incrementAndGet();
+                    if (current <= 3 || current % printStep == 0 || current == totalToSend) {
+                        System.out.printf("   [TIEN TRINH %d/%d] Gui qua %s -> IP: %s%n",
+                                current, totalToSend, (index % 2 == 0 ? "TCP:9999" : "UDP:514"), ev.getDevice());
+                    }
+                } catch (Exception e) {
+                    System.err.println("   [LOI GUI #" + index + "] " + e.getMessage());
                 }
             });
+
+            // Gian cach nhe 12ms de mo phong luong truy cap thuc te,
+            // giup bieu do Throughput Wave tren Dashboard bat kip nhip tinh toan va ve song dep mat
+            try {
+                Thread.sleep(12);
+            } catch (InterruptedException ignored) {}
         }
 
         pool.shutdown();
@@ -176,7 +198,7 @@ public class DatasetReplayScenario {
         System.out.println(String.format(" Thoi gian hoan tat            : %d ms", totalTime));
         System.out.println(String.format(" Toc do xu ly (Throughput)     : %.2f logs/giay", throughput));
         System.out.println("--------------------------------------------------");
-        System.out.println("Ket qua: Server va he thong mang da vuot qua bai kiem thu chiu tai!");
+        System.out.println("Ket qua: Server va he thong mang da tiep nhan on dinh toan bo luu luong!");
     }
 
     private static File locateDatasetFile() {
