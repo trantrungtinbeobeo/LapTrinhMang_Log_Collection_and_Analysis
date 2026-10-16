@@ -142,6 +142,32 @@
       </section>
     </div>
 
+    <!-- Bang Raw Syslog Stream thoi gian thuc (Terminal Console) -->
+    <section class="raw-terminal-card" aria-label="Khung dòng lệnh log thô thời gian thực">
+      <div class="raw-terminal-header">
+        <div class="terminal-title">
+          <span class="terminal-indicator"></span>
+          <span>LIVE RAW SYSLOG TERMINAL · UDP 514 / TCP 9999 / WEBSOCKET</span>
+          <span class="badge" id="raw-count-badge" style="background: #334155; color: #38bdf8; font-size: 11px;">0 gói tin</span>
+        </div>
+        <div class="raw-terminal-actions">
+          <button class="terminal-btn active" id="terminal-autoscroll-btn" type="button" aria-pressed="true">Cuộn tự động: BẬT</button>
+          <button class="terminal-btn" id="terminal-clear-btn" type="button">Xóa màn hình</button>
+        </div>
+      </div>
+      <div class="raw-terminal-body" id="raw-console" tabindex="0" role="region" aria-label="Console log thô">
+        <p class="raw-empty-text">Đang lắng nghe gói tin Syslog RFC 5424 / RFC 3164 truyền qua UDP 514 &amp; TCP 9999...</p>
+      </div>
+    </section>
+
+    <!-- Danh sach IP bi chan boi Firewall (Blacklist) -->
+    <div class="blacklist-card" id="firewall-blacklist-card" hidden>
+      <div class="blacklist-title">
+        <span>🛡️ DANH SÁCH IP ĐANG BỊ FIREWALL KHÓA (GÓI TIN TIẾP THEO BỊ DROP &amp; ĐÃ THANH LỌC CSDL):</span>
+      </div>
+      <div class="blacklist-chips" id="firewall-blacklist-chips"></div>
+    </div>
+
     <!-- Bang lich su log truc tiep -->
     <section class="card logs-card" id="live-logs" aria-labelledby="logs-title">
       <div class="row between wrap">
@@ -246,8 +272,9 @@
           <div class="advice-box" id="modal-log-advice">—</div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary btn-small" id="modal-ok-btn" type="button">Đã hiểu / Đóng</button>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 10px;">
+        <button class="btn btn-danger btn-small" id="modal-block-ip-btn" type="button" title="Khoá IP này vào Firewall và xóa sạch mọi log độc hại khỏi CSDL">⛔ Chặn IP &amp; Xóa log CSDL</button>
+        <button class="btn btn-primary btn-small" id="modal-ok-btn" type="button">Đóng</button>
       </div>
     </dialog>
 

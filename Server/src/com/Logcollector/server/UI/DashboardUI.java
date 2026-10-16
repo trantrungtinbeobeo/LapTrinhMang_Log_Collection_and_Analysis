@@ -50,6 +50,7 @@ public class DashboardUI {
             httpServer = HttpServer.create(new InetSocketAddress(port), 0);
             httpServer.createContext("/api/login", new LoginApiHandler());
             httpServer.createContext("/api/interaction", new InteractionApiHandler());
+            httpServer.createContext("/api/block-ip", new BlockIpApiHandler());
             httpServer.createContext("/", new StaticFileHandler(webRoot));
             httpServer.setExecutor(null); // Dung bo dieu phoi mac dinh
             httpServer.start();
@@ -247,6 +248,71 @@ public class DashboardUI {
             LogQueue.offer(syslogMsg);
 
             String jsonResp = "{\"status\":\"ok\"}";
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+    }
+
+    /**
+     * Handler chan IP thu cong tu giao dien Web Dashboard va thanh loc toan bo log cua IP do khoi CSDL
+     */
+    private static class BlockIpApiHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+
+            if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                java.util.Set<String> blocked = com.Logcollector.server.ServerMain.BLOCKED_IPS;
+                StringBuilder sb = new StringBuilder("{\"blockedIps\":[");
+                int idx = 0;
+                for (String ip : blocked) {
+                    if (idx++ > 0) sb.append(",");
+                    sb.append("\"").append(ip).append("\"");
+                }
+                sb.append("]}");
+                byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                }
+                return;
+            }
+
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String targetIp = null;
+            String reason = "Quan tri vien chan thu cong tu Web Dashboard";
+
+            java.util.regex.Matcher mIp = java.util.regex.Pattern.compile("\"ip\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+            if (mIp.find()) targetIp = mIp.group(1).trim();
+
+            java.util.regex.Matcher mReason = java.util.regex.Pattern.compile("\"reason\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+            if (mReason.find()) reason = mReason.group(1).trim();
+
+            int purged = 0;
+            if (targetIp != null && !targetIp.isEmpty()) {
+                purged = com.Logcollector.server.ServerMain.blockIp(targetIp, reason);
+            }
+
+            String jsonResp = String.format("{\"status\":\"ok\",\"ip\":\"%s\",\"purged\":%d}",
+                    (targetIp != null ? targetIp : ""), purged);
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
             exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
             byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
