@@ -129,39 +129,15 @@
     logTable.update(snapshot.logs);
   }
 
-  scope.addEventListener("change", () => {
-    logTable.reset();
-    render();
-    const onlyActions = scope.value === "interaction";
-    const addSampleBtn = byId("add-sample");
-    const resetSampleBtn = byId("reset-samples");
-    if (addSampleBtn) addSampleBtn.disabled = onlyActions;
-    if (resetSampleBtn) resetSampleBtn.disabled = onlyActions;
-    announce("Đã đổi nguồn cho toàn dashboard, xóa bộ lọc và tiếp tục cập nhật bảng.");
-  });
-  const addSampleBtn = byId("add-sample");
-  if (addSampleBtn) {
-    addSampleBtn.addEventListener("click", () => {
-      window.DashboardData.addSample();
-      announce("Đã thêm log mẫu.");
-    });
-  }
-  const resetSampleBtn = byId("reset-samples");
-  if (resetSampleBtn) {
-    resetSampleBtn.addEventListener("click", () => {
-      window.DashboardData.resetSamples();
+  if (scope) {
+    scope.addEventListener("change", () => {
       logTable.reset();
       render();
-      announce("Đã tạo lại log mẫu.");
     });
   }
 
   function startUpdating() {
     clearInterval(timer);
-    const addSampleBtn = byId("add-sample");
-    const resetSampleBtn = byId("reset-samples");
-    if (addSampleBtn) addSampleBtn.disabled = scope.value === "interaction";
-    if (resetSampleBtn) resetSampleBtn.disabled = scope.value === "interaction";
     render();
     if (!document.hidden) timer = setInterval(render, 1000);
   }
