@@ -10,11 +10,14 @@ import com.Logcollector.server.RealTime.WebSocketServer;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ServerMain {
     private static final int UDP_PORT = 514;
     private static final int TCP_PORT = 9999;
     private static final int WS_PORT = 8085;
+    private static final Pattern SSH_IP_PATTERN = Pattern.compile("(?:from|rhost=|\\[)\\s*([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
 
     public static void main(String[] args) {
         System.out.println("==================================================");
@@ -55,21 +58,23 @@ public class ServerMain {
                         // Boc tach va chuan hoa log
                         LogEvent event = LogParser.parse(rawLog);
 
-                        System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
                         if (event != null) {
-                            System.out.println("   -> [PARSED] IP: " + event.getIp()
+                            String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
+
+                            System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
+                            System.out.println("   -> [PARSED] IP: " + effectiveIp
                                     + " | Thoi gian: " + event.getTimestamp()
                                     + " | Level: " + event.getSeverityLevel()
                                     + " | Noi dung: " + event.getMessage());
 
                             // Kiem tra dau hieu bat thuong (Brute-force login / Port scan)
-                            checkAnomaly(detector, event, rawLog);
+                            checkAnomaly(detector, event, rawLog, effectiveIp);
 
                             // Phat tan log dang JSON qua WebSocket toi Dashboard
                             String logJson = String.format(
                                 "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
                                 logIndex,
-                                escapeJson(event.getIp()),
+                                escapeJson(effectiveIp),
                                 escapeJson(event.getTimestamp()),
                                 escapeJson(event.getSeverityLevel()),
                                 escapeJson(event.getMessage()),
@@ -115,18 +120,30 @@ public class ServerMain {
         }
     }
 
-    private static void checkAnomaly(AnomalyDetector detector, LogEvent event, String rawLog) {
-        String content = (event.getMessage() + " " + rawLog).toUpperCase();
-        String ip = event.getIp() != null ? event.getIp() : "127.0.0.1";
+    private static String extractEffectiveIp(String rawLog, String parsedIp) {
+        if (parsedIp != null && !parsedIp.isEmpty() && !"127.0.0.1".equals(parsedIp) && !"localhost".equalsIgnoreCase(parsedIp)) {
+            return parsedIp;
+        }
+        if (rawLog != null) {
+            Matcher matcher = SSH_IP_PATTERN.matcher(rawLog);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        return parsedIp != null ? parsedIp : "127.0.0.1";
+    }
 
-        if (content.contains("LOGIN_FAILED") || content.contains("FAILED PASSWORD") || content.contains("FAILED LOGIN")) {
-            detector.processLoginEvent(ip, false);
-        } else if (content.contains("LOGIN_SUCCESS") || content.contains("SUCCESSFULLY LOGGED IN")) {
-            detector.processLoginEvent(ip, true);
+    private static void checkAnomaly(AnomalyDetector detector, LogEvent event, String rawLog, String effectiveIp) {
+        String content = (event.getMessage() + " " + rawLog).toUpperCase();
+
+        if (content.contains("LOGIN_FAILED") || content.contains("FAILED PASSWORD") || content.contains("AUTHENTICATION FAILURE")) {
+            detector.processLoginEvent(effectiveIp, false);
+        } else if (content.contains("LOGIN_SUCCESS") || content.contains("SUCCESSFULLY LOGGED IN") || content.contains("ACCEPTED PASSWORD")) {
+            detector.processLoginEvent(effectiveIp, true);
         }
 
         if (content.contains("PORT_SCAN") || content.contains("PORT SCAN")) {
-            detector.processConnectionEvent(ip, 80);
+            detector.processConnectionEvent(effectiveIp, 80);
         }
     }
 
