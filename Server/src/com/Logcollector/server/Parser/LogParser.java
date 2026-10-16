@@ -99,7 +99,10 @@ public class LogParser {
         if (upper.contains("PORT_SCAN") || upper.contains("BRUTE_FORCE") || upper.contains("ATTACK") || upper.contains("FIREWALL") || upper.contains("BLOCKED")) {
             return "SECURITY";
         }
-        if (upper.contains("LOGIN") || upper.contains("PASSWORD") || upper.contains("USER") || upper.contains("AUTHENTICAT") || upper.contains("SSH") || upper.contains("LOGOUT")) {
+        if (upper.contains("VIEW_PRODUCT") || upper.contains("PRODUCT") || upper.contains("CART") || upper.contains("CHECKOUT") || upper.contains("ORDER") || upper.contains("INVENTORY") || upper.contains("CATALOG")) {
+            return "APPLICATION";
+        }
+        if (upper.contains("LOGIN") || upper.contains("PASSWORD") || upper.contains("AUTHENTICAT") || upper.contains("SSH") || upper.contains("LOGOUT")) {
             return "AUTH";
         }
         if (upper.contains("TRAFFIC") || upper.contains("SPIKE") || upper.contains("LATENCY") || upper.contains("BANDWIDTH") || upper.contains("TELEMETRY") || upper.contains("THROUGHPUT")) {
@@ -107,6 +110,9 @@ public class LogParser {
         }
         if (upper.contains("CPU") || upper.contains("MEMORY") || upper.contains("DISK") || upper.contains("FAN") || upper.contains("POWER") || upper.contains("REBOOT") || upper.contains("INTERFACE")) {
             return "SYSTEM";
+        }
+        if (upper.contains("USER")) {
+            return "AUTH";
         }
         return "APPLICATION";
     }

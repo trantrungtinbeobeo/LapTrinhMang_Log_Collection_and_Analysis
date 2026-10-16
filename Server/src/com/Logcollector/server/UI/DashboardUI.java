@@ -243,6 +243,8 @@ public class DashboardUI {
             String action = "VIEW_PRODUCT";
             String item = "San pham dien tu";
             String user = "Admin (Localhost)";
+            int latency = 18 + (int)(Math.random() * 25);
+            int burstCount = 1;
 
             java.util.regex.Matcher mAction = java.util.regex.Pattern.compile("\"type\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
             if (mAction.find()) action = mAction.group(1);
@@ -250,18 +252,74 @@ public class DashboardUI {
             if (mItem.find()) item = mItem.group(1);
             java.util.regex.Matcher mUser = java.util.regex.Pattern.compile("\"user\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
             if (mUser.find()) user = mUser.group(1);
+            java.util.regex.Matcher mLat = java.util.regex.Pattern.compile("\"latency\"\\s*:\\s*(\\d+)").matcher(body);
+            if (mLat.find()) latency = Integer.parseInt(mLat.group(1));
+            java.util.regex.Matcher mBurst = java.util.regex.Pattern.compile("\"burst\"\\s*:\\s*(\\d+)").matcher(body);
+            if (mBurst.find()) burstCount = Math.max(1, Math.min(50, Integer.parseInt(mBurst.group(1))));
 
             int pri = 14;
             String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-
             String deviceWithUser = device + " [User: " + user + "]";
-            String syslogMsg = String.format("<%d>%s %s User '%s' on Device '%s' viewed '%s' [%s]",
-                    pri, timestamp, clientIp, user, deviceWithUser, item, action);
 
-            LogQueue.offer(syslogMsg);
-            System.out.println("[INTERACTION API] Ghi nhan thao tac san pham: " + item + " boi " + user + " tren " + device + " (" + clientIp + ")");
+            if (burstCount > 1) {
+                // Phat sinh dot luu luong (Burst traffic) mo phong giao dich thuong mai dien tu
+                for (int i = 0; i < burstCount; i++) {
+                    int subLat = 15 + (int)(Math.random() * 30);
+                    String subAction = action;
+                    String desc;
+                    switch (i % 5) {
+                        case 0:
+                            subAction = "VIEW_PRODUCT";
+                            desc = String.format("User '%s' on Device '%s' viewed '%s' [VIEW_PRODUCT] | Latency: %dms", user, deviceWithUser, item, subLat);
+                            break;
+                        case 1:
+                            subAction = "INVENTORY_CHECK";
+                            desc = String.format("Inventory-Service verified warehouse stock for '%s' [INVENTORY_CHECK] | Latency: %dms", item, subLat);
+                            break;
+                        case 2:
+                            subAction = "RECOMMENDATION";
+                            desc = String.format("Recommendation-Engine fetched related devices for '%s' [RECOMMENDATION] | Latency: %dms", item, subLat);
+                            break;
+                        case 3:
+                            subAction = "MEDIA_ASSET";
+                            desc = String.format("Edge-CDN delivered high-res media for '%s' to '%s' [MEDIA_ASSET] | Latency: %dms", item, device, subLat);
+                            break;
+                        default:
+                            subAction = "TELEMETRY_PING";
+                            desc = String.format("Client Telemetry-Beacon recorded UI interaction for '%s' [TELEMETRY_PING] | Latency: %dms", item, subLat);
+                            break;
+                    }
+                    String subSyslog = String.format("<%d>%s %s %s", pri, timestamp, clientIp, desc);
+                    LogQueue.offer(subSyslog);
+                }
+                System.out.println("[INTERACTION API] Da ghi nhan BURST (" + burstCount + " logs) thao tac " + action + " cho " + item + " boi " + user + " tren " + device + " (" + clientIp + ")");
+            } else {
+                // Thao tac don le: ghi nhan kem latency thuc te
+                String desc;
+                if ("INVENTORY_CHECK".equals(action)) {
+                    desc = String.format("Inventory-Service checked stock status for '%s' requested by User '%s' [INVENTORY_CHECK] | Latency: %dms", item, user, latency);
+                } else if ("RECOMMENDATION".equals(action)) {
+                    desc = String.format("Recommendation-Engine loaded related items for '%s' [RECOMMENDATION] | Latency: %dms", item, latency);
+                } else if ("MEDIA_ASSET".equals(action)) {
+                    desc = String.format("Edge-CDN cached asset delivery for '%s' to '%s' [MEDIA_ASSET] | Latency: %dms", item, device, latency);
+                } else if ("TELEMETRY_PING".equals(action)) {
+                    desc = String.format("Telemetry-Beacon pinged network latency for User '%s' on Device '%s' [TELEMETRY_PING] | Latency: %dms", user, deviceWithUser, latency);
+                } else if ("ADD_TO_CART".equals(action)) {
+                    desc = String.format("User '%s' on Device '%s' added '%s' to cart [ADD_TO_CART] | Latency: %dms", user, deviceWithUser, item, latency);
+                } else if ("CART_UPDATE".equals(action)) {
+                    desc = String.format("Shopping-Cart-Service synchronized subtotal for User '%s' [CART_UPDATE] | Latency: %dms", user, latency);
+                } else if ("CHECKOUT_ORDER".equals(action) || "CHECKOUT_INTENT".equals(action)) {
+                    desc = String.format("User '%s' on Device '%s' initiated checkout for '%s' [CHECKOUT_ORDER] | Latency: %dms", user, deviceWithUser, item, latency);
+                } else {
+                    desc = String.format("User '%s' on Device '%s' viewed '%s' [%s] | Latency: %dms", user, deviceWithUser, item, action, latency);
+                }
 
-            String jsonResp = "{\"status\":\"ok\"}";
+                String syslogMsg = String.format("<%d>%s %s %s", pri, timestamp, clientIp, desc);
+                LogQueue.offer(syslogMsg);
+                System.out.println("[INTERACTION API] Ghi nhan thao tac: " + action + " tren " + item + " boi " + user + " tren " + device + " (" + clientIp + ") | Latency: " + latency + "ms");
+            }
+
+            String jsonResp = String.format("{\"status\":\"ok\",\"action\":\"%s\",\"item\":\"%s\",\"count\":%d}", action, item, burstCount);
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
             exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
             byte[] bytes = jsonResp.getBytes(StandardCharsets.UTF_8);
