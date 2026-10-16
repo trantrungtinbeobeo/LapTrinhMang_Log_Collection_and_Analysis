@@ -29,15 +29,25 @@
     <noscript><p class="notice notice-error">Bật JavaScript để hiển thị danh sách sản phẩm và tương tác demo.</p></noscript>
     <div class="row between wrap search-row">
       <div class="search-box"><label class="sr-only" for="product-search">Tìm sản phẩm theo tên, mã hoặc danh mục</label><input id="product-search" type="search" placeholder="Tìm theo tên thiết bị, mã sản phẩm hoặc danh mục…" maxlength="160"><button class="icon-btn" id="clear-search" type="button" aria-label="Xóa tìm kiếm" hidden>×</button></div>
-      <span class="badge" title="Đếm PRODUCT_CLICK trong tối đa 500 sự kiện demo được lưu"><span class="dot"></span>Lượt nhấn đã lưu: <strong id="session-click-count">0</strong></span>
+      <div class="row gap-small" style="display:flex; gap:10px; align-items:center;">
+        <span class="badge" title="Đếm PRODUCT_CLICK trong tối đa 500 sự kiện demo được lưu"><span class="dot"></span>Lượt xem: <strong id="session-click-count">0</strong></span>
+        <span class="badge" id="telemetry-badge" style="background:#0f172a; border: 1px solid #334155; color: #38bdf8;" title="Tổng số gói tin đã phát sinh và truyền thành công lên ServerMain"><span class="dot" style="background:#38bdf8;"></span>Lưu lượng Server: <strong id="telemetry-sent-count">0</strong> log</span>
+      </div>
     </div>
     <div class="row between wrap catalog-header">
-      <div><span class="eyebrow">Demo Store / Bộ sưu tập</span><h1>Khám phá sản phẩm</h1><p>Lựa chọn thiết bị phù hợp với bạn.</p></div>
-      <div class="category-tabs" role="group" aria-label="Lọc danh mục sản phẩm">
-        <button type="button" data-category="all" aria-pressed="true">Tất cả</button>
-        <button type="button" data-category="laptop" aria-pressed="false">Laptop</button>
-        <button type="button" data-category="phone" aria-pressed="false">Điện thoại</button>
-        <button type="button" data-category="accessory" aria-pressed="false">Phụ kiện</button>
+      <div>
+        <span class="eyebrow">Demo Store / Bộ sưu tập</span>
+        <h1>Khám phá sản phẩm</h1>
+        <p>Lựa chọn thiết bị phù hợp với bạn. Mỗi thao tác xem & mua hàng sẽ tạo luồng telemetry đẩy trực tiếp lên Server.</p>
+      </div>
+      <div class="row gap-small" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <div class="category-tabs" role="group" aria-label="Lọc danh mục sản phẩm">
+          <button type="button" data-category="all" aria-pressed="true">Tất cả</button>
+          <button type="button" data-category="laptop" aria-pressed="false">Laptop</button>
+          <button type="button" data-category="phone" aria-pressed="false">Điện thoại</button>
+          <button type="button" data-category="accessory" aria-pressed="false">Phụ kiện</button>
+        </div>
+        <button type="button" id="btn-simulate-shopping-spike" class="btn btn-small" style="background:#1e293b; color:#38bdf8; border:1px solid #38bdf8;" title="Mô phỏng đợt mua sắm dồn dập phát sinh 15 gói tin telemetry lên ServerMain">⚡ Mô phỏng lưu lượng (+15 log)</button>
       </div>
     </div>
     <p class="sr-only" id="product-count" role="status" aria-live="polite"></p>
@@ -53,7 +63,12 @@
         <h2 id="detail-name">Chi tiết sản phẩm</h2>
         <div class="dialog-price"><span class="small muted">Giá niêm yết</span><strong id="detail-price"></strong></div>
         <div><h3>Thông số nổi bật</h3><p class="dialog-specs" id="detail-description"></p></div>
-        <div class="dialog-actions"><button class="btn btn-primary" type="button" data-close-dialog>Tiếp tục xem sản phẩm ✓</button><button class="btn" type="button" data-close-dialog>Đóng</button></div>
+        <div class="dialog-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="btn-add-to-cart" type="button" style="background:#059669; border-color:#059669; color:#fff;">🛒 Thêm vào giỏ (+4 log)</button>
+          <button class="btn btn-warning" id="btn-checkout-now" type="button" style="background:#d97706; border-color:#d97706; color:#fff;">⚡ Mua ngay (+4 log)</button>
+          <button class="btn" type="button" data-close-dialog>Đóng</button>
+        </div>
+        <p class="small muted" id="modal-telemetry-notice" style="margin-top: 8px; color: #0284c7; min-height: 18px;"></p>
       </div>
     </div>
   </dialog>

@@ -109,55 +109,171 @@
     search.focus();
   });
 
-  function renderClickCount() {
-    document.getElementById("session-click-count").textContent = money.format(DemoData.getEvents().filter(event => event.type === "PRODUCT_CLICK").length);
+  let totalTelemetrySent = 0;
+  let activeProduct = null;
+
+  function getBackendApiUrl(endpoint) {
+    if (window.location.protocol.startsWith("http") && window.location.port === "8080") {
+      return endpoint;
+    }
+    const host = window.location.hostname || "localhost";
+    return `http://${host}:8080${endpoint}`;
   }
 
-  modalImage.referrerPolicy = "no-referrer";
-  modalImage.addEventListener("error", fallbackImage);
-  // One delegated handler prevents image/title/button bubbling from double-counting.
-  grid.addEventListener("click", event => {
-    const button = event.target.closest("button[data-product-id]");
-    if (!button || !grid.contains(button) || dialog.open) return;
-    const product = catalog.find(item => item.id === button.dataset.productId);
-    if (!product) return;
-    previousFocus = button;
-    document.getElementById("detail-name").textContent = product.name;
-    document.getElementById("detail-code").textContent = product.id;
-    document.getElementById("detail-category").textContent = product.categoryName;
-    document.getElementById("detail-price").textContent = price(product.price);
-    document.getElementById("detail-description").textContent = product.description;
-    setImage(modalImage, product);
-    dialog.showModal();
-    document.body.classList.add("modal-open");
-    DemoData.recordProductClick(product.id);
-    renderClickCount();
-    sendProductInteraction("VIEW_PRODUCT", product);
-  });
+  function updateTelemetryCount(delta = 1) {
+    totalTelemetrySent += delta;
+    const badge = document.getElementById("telemetry-sent-count");
+    if (badge) badge.textContent = money.format(totalTelemetrySent);
+  }
 
-  function sendProductInteraction(actionType, prod) {
-    if (!prod) return;
+  function sendTelemetryEvent(actionType, prod, latency = 20, burst = 1) {
+    if (!prod) return Promise.resolve();
     try {
       const session = DemoData.getSession();
       const userName = (session && session.name) ? session.name : "Admin (Localhost)";
-      fetch("/api/interaction", {
+      const url = getBackendApiUrl("/api/interaction");
+      return fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: actionType,
           productName: prod.name,
           productId: prod.id,
-          user: userName
+          user: userName,
+          latency: latency,
+          burst: burst
         })
       })
       .then(r => r.json())
       .then(res => {
-        console.log(`[Demo Store] Da gui log "${actionType}" len Server thanh cong:`, res);
+        updateTelemetryCount(burst);
+        console.log(`[Demo Store] Da gui log "${actionType}" len ServerMain:`, res);
+        return res;
       })
       .catch(err => {
         console.warn("[Demo Store] Khong the gui log toi Server:", err);
       });
-    } catch (ignored) {}
+    } catch (ignored) {
+      return Promise.resolve();
+    }
+  }
+
+  function renderClickCount() {
+    document.getElementById("session-click-count").textContent = money.format(DemoData.getEvents().filter(event => event.type === "PRODUCT_CLICK").length);
+  }
+
+  modalImage.referrerPolicy = "no-referrer";
+  modalImage.addEventListener("error", fallbackImage);
+
+  function dispatchProductViewPipeline(product) {
+    const steps = [
+      { type: "VIEW_PRODUCT", delay: 0, lat: 18 },
+      { type: "INVENTORY_CHECK", delay: 35, lat: 24 },
+      { type: "RECOMMENDATION", delay: 70, lat: 32 },
+      { type: "MEDIA_ASSET", delay: 105, lat: 15 },
+      { type: "TELEMETRY_PING", delay: 140, lat: 19 }
+    ];
+    steps.forEach(step => {
+      setTimeout(() => {
+        sendTelemetryEvent(step.type, product, step.lat, 1);
+      }, step.delay);
+    });
+    setTimeout(() => {
+      const modalNotice = document.getElementById("modal-telemetry-notice");
+      if (modalNotice) modalNotice.textContent = `✓ Đã phát sinh 5 gói tin telemetry (${product.id}) đẩy lên ServerMain thành công!`;
+    }, 200);
+  }
+
+  // Delegated handler: click card -> open dialog -> dispatch 5 telemetry logs
+  grid.addEventListener("click", event => {
+    const button = event.target.closest("button[data-product-id]");
+    if (!button || !grid.contains(button) || dialog.open) return;
+    const product = catalog.find(item => item.id === button.dataset.productId);
+    if (!product) return;
+    previousFocus = button;
+    activeProduct = product;
+    document.getElementById("detail-name").textContent = product.name;
+    document.getElementById("detail-code").textContent = product.id;
+    document.getElementById("detail-category").textContent = product.categoryName;
+    document.getElementById("detail-price").textContent = price(product.price);
+    document.getElementById("detail-description").textContent = product.description;
+    const modalNotice = document.getElementById("modal-telemetry-notice");
+    if (modalNotice) modalNotice.textContent = "⚡ Đang phát sinh luồng telemetry xem chi tiết thiết bị lên Server...";
+    setImage(modalImage, product);
+    dialog.showModal();
+    document.body.classList.add("modal-open");
+    DemoData.recordProductClick(product.id);
+    renderClickCount();
+
+    // Phat sinh luu luong telemetry thuc te
+    dispatchProductViewPipeline(product);
+  });
+
+  // Nut "Them vao gio hang" trong Dialog
+  const btnAddToCart = document.getElementById("btn-add-to-cart");
+  if (btnAddToCart) {
+    btnAddToCart.addEventListener("click", () => {
+      if (!activeProduct) return;
+      const modalNotice = document.getElementById("modal-telemetry-notice");
+      if (modalNotice) modalNotice.textContent = "🛒 Đang cập nhật giỏ hàng và đồng bộ lên Server...";
+      const cartSteps = [
+        { type: "ADD_TO_CART", delay: 0, lat: 25 },
+        { type: "CART_UPDATE", delay: 35, lat: 19 },
+        { type: "PROMO_CHECK", delay: 70, lat: 22 },
+        { type: "CHECKOUT_INTENT", delay: 105, lat: 16 }
+      ];
+      cartSteps.forEach(s => {
+        setTimeout(() => sendTelemetryEvent(s.type, activeProduct, s.lat, 1), s.delay);
+      });
+      setTimeout(() => {
+        if (modalNotice) modalNotice.textContent = `✓ Đã thêm "${activeProduct.name}" vào giỏ hàng (+4 gói tin tới ServerMain)!`;
+      }, 160);
+    });
+  }
+
+  // Nut "Mua ngay" trong Dialog
+  const btnCheckoutNow = document.getElementById("btn-checkout-now");
+  if (btnCheckoutNow) {
+    btnCheckoutNow.addEventListener("click", () => {
+      if (!activeProduct) return;
+      const modalNotice = document.getElementById("modal-telemetry-notice");
+      if (modalNotice) modalNotice.textContent = "⚡ Đang khởi tạo phiên thanh toán nhanh...";
+      const checkoutSteps = [
+        { type: "CHECKOUT_ORDER", delay: 0, lat: 32 },
+        { type: "PAYMENT_GATEWAY", delay: 40, lat: 45 },
+        { type: "ORDER_CREATED", delay: 80, lat: 28 },
+        { type: "TELEMETRY_PING", delay: 120, lat: 18 }
+      ];
+      checkoutSteps.forEach(s => {
+        setTimeout(() => sendTelemetryEvent(s.type, activeProduct, s.lat, 1), s.delay);
+      });
+      setTimeout(() => {
+        if (modalNotice) modalNotice.textContent = `✓ Đã tạo đơn hàng "${activeProduct.name}" thành công (+4 gói tin tới ServerMain)!`;
+      }, 170);
+    });
+  }
+
+  // Nut "Mo phong luu luong mua sam cuc bo (+15 log)"
+  const btnShoppingSpike = document.getElementById("btn-simulate-shopping-spike");
+  if (btnShoppingSpike) {
+    btnShoppingSpike.addEventListener("click", () => {
+      btnShoppingSpike.disabled = true;
+      btnShoppingSpike.textContent = "⚡ Đang bắn lưu lượng...";
+      const prods = catalog.slice(0, 5);
+      let count = 0;
+      for (let i = 0; i < 15; i++) {
+        const prod = prods[i % prods.length];
+        const action = i % 3 === 0 ? "VIEW_PRODUCT" : (i % 3 === 1 ? "ADD_TO_CART" : "CHECKOUT_ORDER");
+        setTimeout(() => {
+          sendTelemetryEvent(action, prod, 15 + Math.floor(Math.random() * 25), 1);
+          count++;
+          if (count === 15) {
+            btnShoppingSpike.disabled = false;
+            btnShoppingSpike.textContent = "⚡ Mô phỏng lưu lượng (+15 log)";
+          }
+        }, i * 25);
+      }
+    });
   }
 
   document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => dialog.close()));
