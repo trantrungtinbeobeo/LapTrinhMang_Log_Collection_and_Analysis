@@ -252,6 +252,7 @@
   const blacklistCard = byId("firewall-blacklist-card");
   const blacklistChips = byId("firewall-blacklist-chips");
   const blockedIpsSet = new Set();
+  window.isIpBlocked = (ip) => Boolean(ip && blockedIpsSet.has(ip.trim()));
 
   function addBlockedIpChip(ip, reason, purged = 0) {
     if (!ip || blockedIpsSet.has(ip)) return;
@@ -261,6 +262,7 @@
 
     const chip = document.createElement("span");
     chip.className = "blacklist-chip";
+    chip.dataset.ip = ip;
     chip.title = `Lý do: ${reason || 'Vi phạm an ninh'}`;
 
     const ipText = document.createElement("span");
@@ -271,8 +273,74 @@
     purgedBadge.textContent = `-${purged} log`;
     purgedBadge.title = `Đã thanh lọc xóa ${purged} log khỏi SQLite`;
 
-    chip.append(ipText, purgedBadge);
+    const unblockBtn = document.createElement("button");
+    unblockBtn.type = "button";
+    unblockBtn.className = "blacklist-unblock-btn";
+    unblockBtn.textContent = "🔓 Bỏ chặn";
+    unblockBtn.title = `Bỏ chặn IP ${ip} để tiếp tục nhận gói tin`;
+    unblockBtn.addEventListener("click", () => unblockIp(ip));
+
+    chip.append(ipText, purgedBadge, unblockBtn);
     blacklistChips.append(chip);
+  }
+
+  function removeBlockedIpChip(ip) {
+    if (!ip) return;
+    blockedIpsSet.delete(ip);
+    if (blacklistChips) {
+      const chip = blacklistChips.querySelector(`[data-ip="${ip}"]`);
+      if (chip) chip.remove();
+    }
+    if (blockedIpsSet.size === 0 && blacklistCard) {
+      blacklistCard.hidden = true;
+    }
+  }
+
+  async function unblockIp(ip) {
+    if (!ip) return;
+    try {
+      const resp = await fetch("/api/block-ip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unblock", ip: ip })
+      });
+      await resp.json();
+      removeBlockedIpChip(ip);
+      appendRawTerminal(`[FIREWALL UNBLOCK] ĐÃ GỠ CHẶN IP: ${ip} (Sẵn sàng nhận lại gói tin)`, false);
+      announce(`🔓 Đã gỡ chặn địa chỉ IP ${ip}! Server đã sẵn sàng nhận lại gói tin từ IP này.`);
+    } catch (err) {
+      alert("Lỗi khi gửi yêu cầu gỡ chặn IP: " + err.message);
+    }
+  }
+
+  async function unblockAllIps() {
+    if (blockedIpsSet.size === 0) {
+      alert("Hiện tại không có địa chỉ IP nào trong danh sách đen!");
+      return;
+    }
+    const confirmUnblock = confirm(`[XÁC NHẬN MỞ KHÓA FIREWALL]\n\nBạn có chắc chắn muốn gỡ chặn TOÀN BỘ ${blockedIpsSet.size} IP khỏi danh sách đen không?\n\nServer sẽ tiếp tục nhận gói tin bình thường từ tất cả các nguồn.`);
+    if (!confirmUnblock) return;
+
+    try {
+      const resp = await fetch("/api/block-ip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unblock", all: true })
+      });
+      await resp.json();
+      blockedIpsSet.clear();
+      if (blacklistChips) blacklistChips.innerHTML = "";
+      if (blacklistCard) blacklistCard.hidden = true;
+      appendRawTerminal(`[FIREWALL UNBLOCK ALL] ĐÃ GỠ CHẶN TOÀN BỘ IP KHỎI FIREWALL`, false);
+      announce(`🔓 Đã gỡ chặn toàn bộ IP khỏi Firewall! Hệ thống đã mở cổng tiếp nhận bình thường.`);
+    } catch (err) {
+      alert("Lỗi khi gỡ chặn tất cả IP: " + err.message);
+    }
+  }
+
+  const btnUnblockAll = byId("btn-unblock-all-ips");
+  if (btnUnblockAll) {
+    btnUnblockAll.addEventListener("click", unblockAllIps);
   }
 
   // Khoi tao tai danh sach IP da bi chan tu Server
@@ -310,6 +378,17 @@
       } catch (err) {
         alert("Lỗi khi gửi yêu cầu khóa IP tới Server: " + err.message);
       }
+    });
+  }
+
+  const modalUnblockBtn = byId("modal-unblock-ip-btn");
+  if (modalUnblockBtn) {
+    modalUnblockBtn.addEventListener("click", async () => {
+      const targetIp = modalUnblockBtn.dataset.ip;
+      if (!targetIp) return;
+      await unblockIp(targetIp);
+      const dialog = byId("log-detail-dialog");
+      if (dialog) dialog.close();
     });
   }
 
@@ -368,6 +447,22 @@
             appendRawTerminal(`[FIREWALL BLACKLIST] ĐÃ KHÓA IP: ${data.ip} | Lý do: ${data.reason || 'CRITICAL'} | Đã xóa ${data.purged} log khỏi SQLite`, true);
             announce(`⛔ AN NINH: Đã khóa IP ${data.ip} và xóa sạch ${data.purged} log độc hại khỏi CSDL!`);
             render();
+            return;
+          }
+
+          if (data.type === "IP_UNBLOCKED") {
+            removeBlockedIpChip(data.ip);
+            appendRawTerminal(`[FIREWALL UNBLOCK] Đã gỡ lệnh chặn IP: ${data.ip}`, false);
+            announce(`🔓 Đã bỏ chặn IP ${data.ip} thành công!`);
+            return;
+          }
+
+          if (data.type === "ALL_IPS_UNBLOCKED") {
+            blockedIpsSet.clear();
+            if (blacklistChips) blacklistChips.innerHTML = "";
+            if (blacklistCard) blacklistCard.hidden = true;
+            appendRawTerminal(`[FIREWALL UNBLOCK ALL] Đã xóa toàn bộ IP khỏi danh sách đen tường lửa!`, false);
+            announce("🔓 Đã mở khóa toàn bộ IP khỏi danh sách đen tường lửa!");
             return;
           }
 

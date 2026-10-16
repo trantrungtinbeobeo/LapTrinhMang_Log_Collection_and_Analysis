@@ -221,18 +221,36 @@
         }
       }
 
+      const targetIp = (event.ip || "").trim();
+      const isBlocked = Boolean(window.isIpBlocked && window.isIpBlocked(targetIp));
+
       const blockBtn = byId("modal-block-ip-btn");
       if (blockBtn) {
-        const targetIp = (event.ip || "").trim();
         blockBtn.dataset.ip = targetIp;
         if (!targetIp || targetIp === "127.0.0.1" || targetIp === "localhost") {
           blockBtn.disabled = true;
+          blockBtn.style.display = "inline-flex";
           blockBtn.textContent = `⛔ Chặn IP (${targetIp || 'Loopback'})`;
           blockBtn.title = "Không thể chặn IP loopback cục bộ";
+        } else if (isBlocked) {
+          blockBtn.style.display = "none";
         } else {
           blockBtn.disabled = false;
+          blockBtn.style.display = "inline-flex";
           blockBtn.textContent = `⛔ Chặn IP [${targetIp}] & Xóa log CSDL`;
           blockBtn.title = `Khóa IP ${targetIp} vào Firewall và xóa toàn bộ log của IP này khỏi SQLite`;
+        }
+      }
+
+      const unblockBtn = byId("modal-unblock-ip-btn");
+      if (unblockBtn) {
+        unblockBtn.dataset.ip = targetIp;
+        if (isBlocked && targetIp) {
+          unblockBtn.style.display = "inline-flex";
+          unblockBtn.textContent = `🔓 Bỏ chặn IP [${targetIp}]`;
+          unblockBtn.title = `Mở khóa IP ${targetIp} để máy chủ tiếp tục nhận gói tin`;
+        } else {
+          unblockBtn.style.display = "none";
         }
       }
 
