@@ -33,18 +33,18 @@ public class ProductClickScenario {
         List<EventGenerator.LogEvent> events = new ArrayList<>();
         String now = Instant.now().toString();
 
-        events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_DEVICE",
-                "Admin 'admin_trungtin' viewed 'May chu Dell PowerEdge R750' | IP: 192.168.1.10 | Latency: 18ms"));
-        events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_DEVICE",
-                "Admin 'admin_minhhoa' viewed 'Cisco Catalyst Switch 2960-X' | IP: 192.168.1.25 | Latency: 22ms"));
-        events.add(new EventGenerator.LogEvent(now, "INFO", "CONFIG_DEVICE",
-                "Admin 'admin_quynhnga' configured 'Router MikroTik CCR2004' | IP: 192.168.1.33 | Latency: 35ms"));
-        events.add(new EventGenerator.LogEvent(now, "INFO", "DEPLOY_POLICY",
-                "Admin 'admin_quanghai' applied security rule on 'Tuong lua Fortinet 60F' | IP: 192.168.1.40 | Latency: 64ms"));
+        events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_PRODUCT",
+                "User 'user_trungtin' viewed 'iPhone 16 Pro Max 256GB' | IP: 192.168.1.10 | Latency: 18ms"));
+        events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_PRODUCT",
+                "User 'user_minhhoa' viewed 'Laptop MacBook Pro M3 Max' | IP: 192.168.1.25 | Latency: 22ms"));
+        events.add(new EventGenerator.LogEvent(now, "INFO", "ADD_TO_CART",
+                "User 'user_quynhnga' added 'Chuot Logitech MX Master 3S' to cart | IP: 192.168.1.33 | Latency: 35ms"));
+        events.add(new EventGenerator.LogEvent(now, "INFO", "CHECKOUT_ORDER",
+                "User 'user_quanghai' checkout successful Order #DH-9921 | IP: 192.168.1.40 | Latency: 64ms"));
         events.add(new EventGenerator.LogEvent(now, "ERROR", "HTTP_404",
-                "User 'guest_8812' accessed non-existing gateway port '/device/mgmt-port-v2' | IP: 192.168.1.99 | Latency: 12ms"));
-        events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_DEVICE",
-                "Admin 'admin_hoanglong' checked status 'Module Quang Cisco SFP+ 10G' | IP: 192.168.1.15 | Latency: 20ms"));
+                "User 'guest_8812' accessed non-existing product link '/sp/san-pham-cu-2022' | IP: 192.168.1.99 | Latency: 12ms"));
+        events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_PRODUCT",
+                "User 'user_hoanglong' checked status 'Tai nghe Sony WH-1000XM5' | IP: 192.168.1.15 | Latency: 20ms"));
 
         AgentLocalQueue queue = new AgentLocalQueue();
         for (EventGenerator.LogEvent ev : events) {

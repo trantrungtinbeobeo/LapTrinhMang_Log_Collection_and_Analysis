@@ -232,8 +232,8 @@ public class DashboardUI {
             String device = parseDeviceFromUserAgent(userAgent);
 
             String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            String action = "VIEW_DEVICE";
-            String item = "Thiet bi mang";
+            String action = "VIEW_PRODUCT";
+            String item = "San pham dien tu";
             java.util.regex.Matcher mAction = java.util.regex.Pattern.compile("\"type\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
             if (mAction.find()) action = mAction.group(1);
             java.util.regex.Matcher mItem = java.util.regex.Pattern.compile("\"productName\"\\s*:\\s*\"([^\"]+)\"").matcher(body);

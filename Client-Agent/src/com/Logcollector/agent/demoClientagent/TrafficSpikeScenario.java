@@ -39,13 +39,13 @@ public class TrafficSpikeScenario {
         System.out.println("[KY VONG] Do tre (Latency) se tang dan do tai dồn dập, Server va Client khong bi nghen/drop.\n");
 
         List<EventGenerator.LogEvent> events = new ArrayList<>();
-        String[] devices = {"May chu Dell R750", "Cisco Switch 2960", "Router MikroTik 2004", "Tuong lua Fortinet 60F", "Module SFP+ 10G"};
+        String[] products = {"iPhone 16 Pro Max", "MacBook Pro M3", "Tai nghe Sony WH-1000XM5", "Chuot Logitech MX Master 3S", "Laptop Gaming Titan X15"};
 
         for (int i = 1; i <= count; i++) {
             String now = Instant.now().toString();
             String ip = "192.168.1." + ((i % 150) + 1);
-            String user = "operator_" + (1000 + i);
-            String dev = devices[i % devices.length];
+            String user = "user_" + (1000 + i);
+            String prod = products[i % products.length];
 
             // Tinh toan do tre tang dan khi luu luong don tai:
             // - Duoi 200ms : INFO (Binh thuong)
@@ -53,13 +53,13 @@ public class TrafficSpikeScenario {
             // - Tren 400ms  : CRITICAL (Nguy hiem - qua tai he thong)
             int latency = 15 + (int) (Math.pow(i, 1.22) * 0.45);
             String severity = (latency > 400) ? "CRITICAL" : (latency > 200 ? "WARNING" : "INFO");
-            String eventType = (i % 7 == 0) ? "HEAVY_REPORT" : "TELEMETRY_POLL";
+            String eventType = (i % 7 == 0) ? "ADD_TO_CART" : "VIEW_PRODUCT";
 
             events.add(new EventGenerator.LogEvent(
                     now,
                     severity,
                     eventType,
-                    String.format("Device '%s' polled by '%s' | IP: %s | Latency: %dms", dev, user, ip, latency)
+                    String.format("User '%s' click '%s' | IP: %s | Latency: %dms", user, prod, ip, latency)
             ));
         }
 
