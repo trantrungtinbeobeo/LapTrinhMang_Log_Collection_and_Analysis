@@ -79,6 +79,7 @@
     const snapshot = window.DashboardData.getSnapshot(scope.value);
     const values = {
       "total-logs": snapshot.total, "current-rate": snapshot.current, "total-ips": snapshot.ipCount,
+      "active-online-users": Math.max(1, snapshot.ipCount),
       "total-alerts": snapshot.alerts.length, "traffic-current": snapshot.current, "peak-rate": snapshot.peak
     };
     Object.entries(values).forEach(([id, value]) => {
@@ -108,6 +109,7 @@
     }
     logTable.update(snapshot.logs);
   }
+  window.renderDashboard = render;
 
   if (scope) {
     scope.addEventListener("change", () => {
@@ -311,6 +313,29 @@
     });
   }
 
+  // Xu ly nut bam Xoa toan bo log khoi giao dien va localStorage
+  const clearAllLogsBtn = byId("btn-clear-all-logs");
+  if (clearAllLogsBtn) {
+    clearAllLogsBtn.addEventListener("click", () => {
+      const confirmed = confirm(
+        "[XÁC NHẬN XÓA LỊCH SỬ LOG]\n\nBạn có chắc chắn muốn XÓA TOÀN BỘ lịch sử log trên Dashboard không?\n\n- Toàn bộ log trong bộ nhớ và bảng sẽ được làm trống.\n- Biểu đồ lưu lượng và tỷ lệ sẽ trở về ban đầu.\n\n(Lưu ý: Log chỉ bị xóa khi bạn bấm nút này, việc tải lại trang/F5 sẽ không bao giờ làm mất log)."
+      );
+      if (!confirmed) return;
+
+      if (window.DashboardData && window.DashboardData.clearAllLogs) {
+        window.DashboardData.clearAllLogs();
+      }
+      if (rawConsole) {
+        rawConsole.innerHTML = '<p class="raw-empty-text">Màn hình terminal đã được xóa. Đang chờ gói tin mới...</p>';
+      }
+      rawPacketCount = 0;
+      if (rawCountBadge) rawCountBadge.textContent = "0 gói tin";
+      contentSignature = null;
+      render();
+      announce("✓ Đã xóa toàn bộ lịch sử log trên giao diện!");
+    });
+  }
+
   // Ket noi WebSocket Real-time toi ServerMain qua cong 8085
   function connectWebSocket() {
     try {
@@ -355,10 +380,10 @@
           // Xu ly du lieu do luong va du bao tang truong 200 nguoi dung
           const rawContent = (data.raw || data.message || "");
           if (rawContent.includes("ActiveUsers:")) {
-            const mUsers = rawContent.match(/ActiveUsers:\s*(\d+)/);
-            const mLat = rawContent.match(/Latency:\s*(\d+)ms/);
-            const mImpact = rawContent.match(/Impact:\s*([0-9.]+)%/);
-            const mPred404 = rawContent.match(/Pred404:\s*([0-9.]+)%/);
+            const mUsers = rawContent.match(/ActiveUsers:\s*(\d+)/i);
+            const mLat = rawContent.match(/Latency:\s*(\d+)ms/i);
+            const mImpact = rawContent.match(/(?:ShoppingImpact|Impact):\s*([0-9.]+)%/i);
+            const mPred404 = rawContent.match(/(?:Pred404|ErrorRate):\s*([0-9.]+)%/i);
             if (mUsers) {
               const u = parseInt(mUsers[1], 10);
               const lat = mLat ? parseInt(mLat[1], 10) : 18;

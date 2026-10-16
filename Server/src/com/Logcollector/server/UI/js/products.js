@@ -126,8 +126,62 @@
     if (badge) badge.textContent = money.format(totalTelemetrySent);
   }
 
+  const STORAGE_KEY = "dashboard_live_logs_v2";
+
+  function persistStoreLogToLocal(actionType, prod, latency = 20, burst = 1) {
+    try {
+      let stored = [];
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) stored = JSON.parse(raw);
+      } catch (e) { stored = []; }
+      if (!Array.isArray(stored)) stored = [];
+
+      const session = DemoData.getSession();
+      const userName = (session && session.name) ? session.name : "Admin (Localhost)";
+      const now = Date.now();
+      const prodName = prod ? prod.name : "Thiết bị điện tử";
+      const prodId = prod ? prod.id : "PRD-DEMO";
+
+      for (let i = 0; i < burst; i++) {
+        let subType = actionType;
+        let subDesc = `User '${userName}' performed ${actionType} for '${prodName}' [${prodId}] | Latency: ${latency}ms`;
+
+        if (actionType === "ADD_TO_CART" && burst > 1) {
+          switch (i % 4) {
+            case 0: subType = "ADD_TO_CART"; subDesc = `User '${userName}' added '${prodName}' to cart [ADD_TO_CART] | Latency: ${latency}ms`; break;
+            case 1: subType = "CART_UPDATE"; subDesc = `Shopping-Cart-Service synchronized subtotal for User '${userName}' [CART_UPDATE] | Latency: ${latency}ms`; break;
+            case 2: subType = "PROMO_CHECK"; subDesc = `Promo-Engine applied flash vouchers for '${prodName}' [PROMO_CHECK] | Latency: ${latency}ms`; break;
+            case 3: subType = "CHECKOUT_INTENT"; subDesc = `Checkout-Pipeline initialized intent for User '${userName}' [CHECKOUT_INTENT] | Latency: ${latency}ms`; break;
+          }
+        }
+
+        stored.unshift({
+          id: `prod-local-${now}-${i}-${Math.random().toString(36).substring(2, 7)}`,
+          at: now + i * 15,
+          severity: "INFO",
+          ip: "127.0.0.1",
+          device: "Web Store Browser [User: " + userName + "]",
+          category: "APPLICATION",
+          source: "interaction",
+          type: subType,
+          message: subDesc,
+          raw: `<14>${new Date(now + i * 15).toISOString()} 127.0.0.1 ${subDesc}`
+        });
+      }
+
+      if (stored.length > 1000) stored = stored.slice(0, 1000);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    } catch (e) {
+      // Bo qua loi luu tru
+    }
+  }
+
   function sendTelemetryEvent(actionType, prod, latency = 20, burst = 1) {
     if (!prod) return Promise.resolve();
+    // Luu ngay vao localStorage de khi chuyen qua Dashboard hoac F5 se thay ngay lap tuc
+    persistStoreLogToLocal(actionType, prod, latency, burst);
+
     try {
       const session = DemoData.getSession();
       const userName = (session && session.name) ? session.name : "Admin (Localhost)";
