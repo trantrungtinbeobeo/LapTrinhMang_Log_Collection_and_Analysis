@@ -58,8 +58,8 @@ public class DemoClientAgent {
                     System.out.println("Da thoat chuong trinh demo.");
                     break;
                 default:
-                    System.out.println("Khong co lua chon hoac lua chon khong hop le. Dang chay mac dinh Kich ban 2 (Product Click)...");
-                    ProductClickScenario.main(new String[]{});
+                    System.out.println("Dang chay mac dinh Kich ban 5 (Phat lai Dataset OpenSSH that)...");
+                    DatasetReplayScenario.main(new String[]{"1"});
                     break;
             }
         }

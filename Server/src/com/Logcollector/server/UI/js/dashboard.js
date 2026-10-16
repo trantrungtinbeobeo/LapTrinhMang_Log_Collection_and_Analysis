@@ -25,16 +25,17 @@
 
   function renderProducts(events) {
     const container = byId("recent-products");
+    if (!container) return;
     if (!events.length) {
-      emptyList(container, "Chưa có lượt xem sản phẩm trong 5 phút gần nhất.", "li");
+      emptyList(container, "Chưa có lượt xem thiết bị trong 5 phút gần nhất.", "li");
       return;
     }
     container.replaceChildren(...events.map(event => {
       const item = document.createElement("li");
       const name = document.createElement("strong");
-      name.textContent = event.productName || event.productId || "Sản phẩm demo";
+      name.textContent = event.productName || event.productId || "Thiết bị demo";
       const details = document.createElement("span");
-      details.textContent = `${event.actor || "Khách demo"} · ${time.format(event.at)}`;
+      details.textContent = `${event.actor || "Kỹ thuật viên"} · ${time.format(event.at)}`;
       item.append(name, details);
       return item;
     }));
@@ -42,6 +43,7 @@
 
   function renderAlerts(events) {
     const container = byId("security-alerts");
+    if (!container) return;
     if (!events.length) {
       emptyList(container, "Không có cảnh báo mẫu trong nguồn và cửa sổ đang chọn.");
       return;
@@ -63,6 +65,7 @@
 
   function renderIps(ips) {
     const container = byId("top-ips");
+    if (!container) return;
     if (!ips.length) {
       emptyList(container, "Chưa có log chứa IP mẫu trong cửa sổ này.", "li");
       return;
@@ -97,16 +100,28 @@
       "register-count": snapshot.interactions.REGISTER_SUCCESS, "login-count": snapshot.interactions.LOGIN_SUCCESS,
       "failed-count": snapshot.interactions.LOGIN_FAILED, "click-count": snapshot.interactions.PRODUCT_CLICK
     };
-    Object.entries(values).forEach(([id, value]) => { byId(id).textContent = number.format(value); });
-    byId("average-rate").textContent = snapshot.average.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
-    byId("updated-at").textContent = time.format(snapshot.end);
-    byId("updated-at").dateTime = new Date(snapshot.end).toISOString();
-    window.DashboardCharts.drawTraffic(byId("traffic-chart"), snapshot);
+    Object.entries(values).forEach(([id, value]) => {
+      const el = byId(id);
+      if (el) el.textContent = number.format(value);
+    });
+    const avgRateEl = byId("average-rate");
+    if (avgRateEl) avgRateEl.textContent = snapshot.average.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+    const updateEl = byId("updated-at");
+    if (updateEl) {
+      updateEl.textContent = time.format(snapshot.end);
+      updateEl.dateTime = new Date(snapshot.end).toISOString();
+    }
+    const trafficChartEl = byId("traffic-chart");
+    if (trafficChartEl) window.DashboardCharts.drawTraffic(trafficChartEl, snapshot);
     // Avoid rebuilding unchanged lists and the donut on every timer tick.
     const signature = snapshot.logs.map(event => event.id).join("|");
     if (signature !== contentSignature) {
       contentSignature = signature;
-      window.DashboardCharts.drawSeverity(byId("severity-chart"), byId("severity-legend"), snapshot.counts);
+      const sevChartEl = byId("severity-chart");
+      const sevLegendEl = byId("severity-legend");
+      if (sevChartEl && sevLegendEl) {
+        window.DashboardCharts.drawSeverity(sevChartEl, sevLegendEl, snapshot.counts);
+      }
       renderProducts(snapshot.recentProducts);
       renderAlerts(snapshot.alerts);
       renderIps(snapshot.topIps);
@@ -118,25 +133,35 @@
     logTable.reset();
     render();
     const onlyActions = scope.value === "interaction";
-    byId("add-sample").disabled = onlyActions;
-    byId("reset-samples").disabled = onlyActions;
+    const addSampleBtn = byId("add-sample");
+    const resetSampleBtn = byId("reset-samples");
+    if (addSampleBtn) addSampleBtn.disabled = onlyActions;
+    if (resetSampleBtn) resetSampleBtn.disabled = onlyActions;
     announce("Đã đổi nguồn cho toàn dashboard, xóa bộ lọc và tiếp tục cập nhật bảng.");
   });
-  byId("add-sample").addEventListener("click", () => {
-    window.DashboardData.addSample();
-    announce("Đã thêm log mẫu. Log sẽ xuất hiện khi chốt giây kế tiếp; bảng đang tạm dừng hoặc có bộ lọc có thể chưa hiển thị log này.");
-  });
-  byId("reset-samples").addEventListener("click", () => {
-    window.DashboardData.resetSamples();
-    logTable.reset();
-    render();
-    announce("Đã tạo lại 1.200 log mẫu và tiếp tục bảng. Giữ nguyên tài khoản cùng các thao tác demo đã ghi nhận.");
-  });
+  const addSampleBtn = byId("add-sample");
+  if (addSampleBtn) {
+    addSampleBtn.addEventListener("click", () => {
+      window.DashboardData.addSample();
+      announce("Đã thêm log mẫu.");
+    });
+  }
+  const resetSampleBtn = byId("reset-samples");
+  if (resetSampleBtn) {
+    resetSampleBtn.addEventListener("click", () => {
+      window.DashboardData.resetSamples();
+      logTable.reset();
+      render();
+      announce("Đã tạo lại log mẫu.");
+    });
+  }
 
   function startUpdating() {
     clearInterval(timer);
-    byId("add-sample").disabled = scope.value === "interaction";
-    byId("reset-samples").disabled = scope.value === "interaction";
+    const addSampleBtn = byId("add-sample");
+    const resetSampleBtn = byId("reset-samples");
+    if (addSampleBtn) addSampleBtn.disabled = scope.value === "interaction";
+    if (resetSampleBtn) resetSampleBtn.disabled = scope.value === "interaction";
     render();
     if (!document.hidden) timer = setInterval(render, 1000);
   }
@@ -147,4 +172,56 @@
   window.addEventListener("pagehide", () => { clearInterval(timer); clearTimeout(statusTimer); });
   window.addEventListener("pageshow", startUpdating);
   startUpdating();
+
+  // Ket noi WebSocket Real-time toi ServerMain qua cong 8085
+  function connectWebSocket() {
+    try {
+      const badge = document.querySelector(".demo-badge");
+      const ws = new WebSocket("ws://localhost:8085");
+
+      ws.onopen = () => {
+        if (badge) {
+          badge.textContent = "● ĐÃ KẾT NỐI REALTIME (ws://localhost:8085)";
+          badge.style.background = "#059669";
+          badge.style.color = "#ffffff";
+        }
+        if (scope) {
+          scope.value = "realtime";
+        }
+        render();
+        announce("Đã kết nối thành công tới WebSocket Server (Cổng 8085). Dữ liệu log trực tiếp đang được cập nhật!");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (window.DashboardData && window.DashboardData.addLiveLog) {
+            window.DashboardData.addLiveLog(data);
+            if (scope && scope.value === "interaction") {
+              scope.value = "realtime";
+            }
+            render();
+          }
+        } catch (ignored) {}
+      };
+
+      ws.onclose = () => {
+        if (badge) {
+          badge.textContent = "BẢN DEMO · CHƯA KẾT NỐI BACKEND";
+          badge.style.background = "";
+          badge.style.color = "";
+        }
+        // Thu ket noi lai sau 3 giay neu mat ket noi
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    } catch (e) {
+      // Trinh duyet hoac mang khong ho tro websocket thi giu nguyen che do demo
+    }
+  }
+
+  connectWebSocket();
 })();

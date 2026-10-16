@@ -6,6 +6,8 @@ import com.Logcollector.server.Core.LogQueue;
 import com.Logcollector.server.Parser.LogEvent;
 import com.Logcollector.server.Parser.LogParser;
 import com.Logcollector.server.RealTime.WebSocketServer;
+import com.Logcollector.server.UI.ChartManager;
+import com.Logcollector.server.UI.DashboardUI;
 
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
@@ -17,6 +19,7 @@ public class ServerMain {
     private static final int UDP_PORT = 514;
     private static final int TCP_PORT = 9999;
     private static final int WS_PORT = 8085;
+    private static final int HTTP_PORT = 8080;
     private static final Pattern SSH_IP_PATTERN = Pattern.compile("(?:from|rhost=|\\[)\\s*([0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
 
     public static void main(String[] args) {
@@ -25,12 +28,17 @@ public class ServerMain {
         System.out.println("==================================================");
 
         try {
-            // 1. Khoi dong WebSocket Server de broadcast log thoi gian thuc xuong Web Dashboard
+            // 1. Khoi dong Web Server HTTP (cong 8080) phuc vu Dashboard va WebSocket Server (cong 8085)
+            System.out.println("[UI] Dang khoi dong Web Server Dashboard tai cong " + HTTP_PORT + "...");
+            DashboardUI dashboardUI = new DashboardUI(HTTP_PORT);
+            dashboardUI.start();
+
             System.out.println("[WEBSOCKET] Dang khoi dong WebSocket Server tai cong " + WS_PORT + "...");
             WebSocketServer wsServer = new WebSocketServer(WS_PORT);
             wsServer.start();
 
-            // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va gan callback day alert qua WebSocket
+            // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va Bo tong hop bieu do (ChartManager)
+            ChartManager chartManager = new ChartManager();
             AnomalyDetector detector = new AnomalyDetector();
             detector.setAlertListener((alertType, sourceIp, alertMessage) -> {
                 System.err.println("\n[CANH BAO AN NINH] [" + alertType + "] IP: " + sourceIp + " -> " + alertMessage);
@@ -44,7 +52,7 @@ public class ServerMain {
                 wsServer.broadcast(alertJson);
             });
 
-            // 3. Luong tieu thu log tu LogQueue, boc tach qua LogParser va phan tich
+            // 3. Luong tieu thu log tu LogQueue, boc tach qua LogParser, thong ke va phan tich
             ExecutorService consumer = Executors.newSingleThreadExecutor();
             consumer.submit(() -> {
                 System.out.println("[PIPELINE] San sang lay log tu Queue, boc tach va phat tan...");
@@ -60,6 +68,9 @@ public class ServerMain {
 
                         if (event != null) {
                             String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
+
+                            // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
+                            chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
 
                             System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
                             System.out.println("   -> [PARSED] IP: " + effectiveIp
@@ -99,6 +110,7 @@ public class ServerMain {
 
             System.out.println("==================================================");
             System.out.println("   SERVER DANG CHAY! SAN SANG PHUC VU");
+            System.out.println("   - Web Dashboard   : http://localhost:" + HTTP_PORT + "/dashboard.html");
             System.out.println("   - UDP Ingestion   : Cong " + UDP_PORT);
             System.out.println("   - TCP Ingestion   : Cong " + TCP_PORT);
             System.out.println("   - WebSocket Stream: Cong " + WS_PORT + " (ws://localhost:" + WS_PORT + ")");
@@ -109,6 +121,7 @@ public class ServerMain {
                 System.out.println("\n[SHUTDOWN] Dang dung cac tien trinh Server...");
                 engine.stop();
                 wsServer.stop();
+                dashboardUI.stop();
                 consumer.shutdownNow();
             }));
 

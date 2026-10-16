@@ -55,8 +55,18 @@
         ipCell.title = event.ip ? "Địa chỉ IP mẫu, không phải IP thu thập thật" : "Frontend chưa thu thập IP";
         const sourceCell = document.createElement("td");
         const source = document.createElement("span");
-        source.className = `badge log-source${event.source === "interaction" ? " log-source-interaction" : ""}`;
-        source.textContent = event.source === "interaction" ? "Thao tác demo" : "Mẫu";
+        if (event.source === "realtime") {
+          source.className = "badge";
+          source.style.background = "#059669";
+          source.style.color = "#ffffff";
+          source.textContent = "Server Realtime";
+        } else if (event.source === "interaction") {
+          source.className = "badge log-source log-source-interaction";
+          source.textContent = "Thao tác demo";
+        } else {
+          source.className = "badge log-source";
+          source.textContent = "Mẫu";
+        }
         sourceCell.append(source);
         const messageCell = document.createElement("td");
         const type = document.createElement("span");
@@ -65,7 +75,17 @@
         const message = document.createElement("span");
         message.textContent = event.message + (event.type === "PRODUCT_CLICK" ? ` ${event.productName || event.productId || "Sản phẩm"} · ${event.actor || "Khách demo"}.` : "");
         messageCell.append(type, message);
-        row.append(dateCell, severityCell, ipCell, sourceCell, messageCell);
+        const actionCell = document.createElement("td");
+        actionCell.style.textAlign = "center";
+        const detailBtn = document.createElement("button");
+        detailBtn.type = "button";
+        detailBtn.className = "btn btn-outline btn-tiny";
+        detailBtn.textContent = "Xem";
+        detailBtn.title = "Xem chi tiết bản ghi log này";
+        detailBtn.addEventListener("click", () => openLogDetail(event));
+        actionCell.append(detailBtn);
+
+        row.append(dateCell, severityCell, ipCell, sourceCell, messageCell, actionCell);
         fragment.append(row);
       });
       rows.replaceChildren(fragment);
@@ -126,6 +146,87 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       announce(`Đã yêu cầu tải JSON gồm ${number.format(exported.length)} log theo bộ lọc hiện tại.`);
     });
+
+    function openLogDetail(event) {
+      const dialog = byId("log-detail-dialog");
+      if (!dialog) return;
+
+      const logIdEl = byId("modal-log-id");
+      if (logIdEl) logIdEl.textContent = event.id || ("LOG-" + Math.abs(event.at).toString(36).toUpperCase());
+
+      const logTimeEl = byId("modal-log-time");
+      if (logTimeEl) logTimeEl.textContent = `${new Date(event.at).toLocaleString("vi-VN")} (${event.at})`;
+
+      const logIpEl = byId("modal-log-ip");
+      if (logIpEl) logIpEl.textContent = event.ip || "127.0.0.1";
+
+      const sevEl = byId("modal-log-severity");
+      if (sevEl) {
+        sevEl.textContent = event.severity;
+        sevEl.className = `detail-val severity severity-${(event.severity || "info").toLowerCase()}`;
+      }
+
+      const typeEl = byId("modal-log-type");
+      if (typeEl) typeEl.textContent = event.type || "SYSLOG_EVENT";
+
+      const msgEl = byId("modal-log-message");
+      if (msgEl) msgEl.textContent = event.message || "—";
+
+      const rawEl = byId("modal-log-raw");
+      if (rawEl) {
+        if (event.raw) {
+          rawEl.textContent = event.raw;
+        } else {
+          const pri = event.severity === "CRITICAL" ? 11 : event.severity === "WARNING" ? 12 : 14;
+          rawEl.textContent = `<${pri}>1 ${new Date(event.at).toISOString()} ${event.ip || "127.0.0.1"} ${event.type || "syslog"} - - [flow id="${event.id || 'N/A'}"] ${event.message}`;
+        }
+      }
+
+      const adviceEl = byId("modal-log-advice");
+      if (adviceEl) {
+        const sev = (event.severity || "").toUpperCase();
+        const type = (event.type || "").toUpperCase();
+        const msg = (event.message || "").toLowerCase();
+
+        if (sev === "CRITICAL" || type.includes("CRITICAL") || type.includes("BRUTE_FORCE") || type.includes("ATTACK")) {
+          adviceEl.className = "advice-box advice-critical";
+          adviceEl.innerHTML = `<strong>⚠️ MỨC ĐỘ NGUY HIỂM CAO:</strong> Phát hiện chuỗi đăng nhập thất bại vượt ngưỡng (&ge; 5 lần) hoặc tấn công từ IP <code>${event.ip || "nguồn"}</code>.<br><strong>Khuyến nghị ứng phó:</strong> Kích hoạt chính sách Firewall/iptables khóa tức thời IP nguồn (Drop packet), cô lập cổng SSH/RDP và thu hồi phiên người dùng bị ảnh hưởng.`;
+        } else if (sev === "WARNING" || type.includes("WARNING") || type.includes("LOGIN_FAILED") || msg.includes("failed") || msg.includes("tre cao")) {
+          adviceEl.className = "advice-box advice-warning";
+          adviceEl.innerHTML = `<strong>⚡ CẢNH BÁO TIỀM TÀNG:</strong> Ghi nhận 3–4 lần đăng nhập sai hoặc độ trễ mạng vượt ngưỡng chuẩn (200ms – 400ms).<br><strong>Khuyến nghị ứng phó:</strong> Giám sát liên tục IP <code>${event.ip || "nguồn"}</code>, chuẩn bị cơ chế Rate Limiting / CAPTCHA để ngăn chặn leo thang thành tấn công Brute-force.`;
+        } else if (type.includes("LOGIN_SUCCESS") || msg.includes("accepted")) {
+          adviceEl.className = "advice-box";
+          adviceEl.innerHTML = `<strong>✅ XÁC THỰC THÀNH CÔNG:</strong> Phiên đăng nhập hợp lệ từ IP <code>${event.ip || "127.0.0.1"}</code> đã được hệ thống cấp quyền truy cập an toàn.`;
+        } else if (type.includes("TRAFFIC") || type.includes("NETWORK")) {
+          adviceEl.className = "advice-box";
+          adviceEl.innerHTML = `<strong>📊 GIÁM SÁT HẠ TẦNG:</strong> Đo kiểm viễn trắc mạng định kỳ của thiết bị mạng. Băng thông và độ trễ phản hồi đang ở mức ổn định.`;
+        } else {
+          adviceEl.className = "advice-box";
+          adviceEl.innerHTML = `<strong>ℹ️ NHẬT KÝ BÌNH THƯỜNG:</strong> Sự kiện vận hành tiêu chuẩn của hệ thống và dịch vụ mạng. Không phát hiện dấu hiệu bất thường.`;
+        }
+      }
+
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+    }
+
+    const closeDialog = () => {
+      const dialog = byId("log-detail-dialog");
+      if (dialog) dialog.close();
+    };
+    const modalClose = byId("modal-close-btn");
+    const modalOk = byId("modal-ok-btn");
+    if (modalClose) modalClose.addEventListener("click", closeDialog);
+    if (modalOk) modalOk.addEventListener("click", closeDialog);
+    const dialogEl = byId("log-detail-dialog");
+    if (dialogEl) {
+      dialogEl.addEventListener("click", (e) => {
+        if (e.target === dialogEl) closeDialog();
+      });
+    }
 
     return Object.freeze({
       update(logs) { latest = logs.slice(0, 500); if (!paused) acceptLatest(); },

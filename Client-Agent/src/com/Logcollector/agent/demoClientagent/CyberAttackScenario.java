@@ -30,12 +30,14 @@ public class CyberAttackScenario {
         List<EventGenerator.LogEvent> events = new ArrayList<>();
         String now = Instant.now().toString();
 
-        // 1. 5 lan dang nhap sai lien tiep tu cung 1 IP hacker de vuot nguong Brute-force
+        // 1. 5 lan dang nhap sai lien tiep tu cung 1 IP hacker:
+        // Phan cap leo thang bao mat: Lan 1-2: INFO, Lan 3-4: WARNING, Lan 5: CRITICAL
         String hackerIp = "192.168.1.200";
         for (int i = 1; i <= 5; i++) {
+            String severity = (i >= 5) ? "CRITICAL" : (i >= 3 ? "WARNING" : "INFO");
             events.add(new EventGenerator.LogEvent(
                     now,
-                    "ERROR",
+                    severity,
                     "LOGIN_FAILED",
                     String.format("Failed password for user admin from IP %s (Lan %d/5)", hackerIp, i)
             ));

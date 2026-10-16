@@ -164,7 +164,7 @@ public class WebSocketServer {
                     } else {
                         frame.write(127);
                         for (int i = 7; i >= 0; i--) {
-                            frame.write((int) ((rawData.length >> (8 * i)) & 0xFF));
+                            frame.write((rawData.length >> (8 * i)) & 0xFF);
                         }
                     }
 

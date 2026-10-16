@@ -69,9 +69,11 @@ public class DatasetReplayScenario {
 
         for (int i = 0; i < attackLines.size(); i++) {
             String rawLine = attackLines.get(i);
+            // Phan cap leo thang: 2 lan dau INFO, lan 3-4 WARNING, tu lan 5 CRITICAL
+            String severity = (i >= 4) ? "CRITICAL" : (i >= 2 ? "WARNING" : "INFO");
             queue.enqueue(new EventGenerator.LogEvent(
                     now,
-                    "ERROR",
+                    severity,
                     "LOGIN_FAILED",
                     rawLine
             ));
@@ -132,19 +134,27 @@ public class DatasetReplayScenario {
 
         int totalToSend = queue.size();
         System.out.println("[LOCAL QUEUE] Da nap " + totalToSend + " log vao hang doi cuc bo.");
-        System.out.println("[BAT DAU BAN DON DAP QUA UDP (CONG " + UDP_PORT + ")]...\n");
+        System.out.println("[BAT DAU BAN DON DAP QUA UDP (CONG " + UDP_PORT + ") VA TCP (CONG " + TCP_PORT + ")]...\n");
 
         ExecutorService pool = Executors.newFixedThreadPool(10);
         AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger counter = new AtomicInteger(0);
         long startTime = System.currentTimeMillis();
 
         while (!queue.isEmpty()) {
             EventGenerator.LogEvent ev = queue.dequeue();
+            int index = counter.incrementAndGet();
             pool.submit(() -> {
                 try {
-                    UDPSender sender = new UDPSender(HOST, UDP_PORT);
                     String message = formatter.format3164(ev);
-                    sender.send(message);
+                    // Luan phien gui qua ca UDP (514) va TCP (9999) de kiem thu dong thoi ca 2 cong tiep nhan
+                    if (index % 2 == 0) {
+                        TCPSender tcpSender = new TCPSender(HOST, TCP_PORT);
+                        tcpSender.send(message);
+                    } else {
+                        UDPSender udpSender = new UDPSender(HOST, UDP_PORT);
+                        udpSender.send(message);
+                    }
                     successCount.incrementAndGet();
                 } catch (Exception ignored) {
                 }
