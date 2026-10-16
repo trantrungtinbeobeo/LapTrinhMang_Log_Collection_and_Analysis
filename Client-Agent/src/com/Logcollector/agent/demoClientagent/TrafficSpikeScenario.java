@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class TrafficSpikeScenario {
 
-    private static final String HOST = "127.0.0.1";
+    private static final String HOST = System.getProperty("server.host", "127.0.0.1");
     private static final int TCP_PORT = 9999;
     private static final int UDP_PORT = 514;
     private static final int DEFAULT_SPIKE_COUNT = 150;
@@ -39,24 +39,45 @@ public class TrafficSpikeScenario {
         System.out.println("[KY VONG] Do tre (Latency) se tang dan do tai dồn dập, Server va Client khong bi nghen/drop.\n");
 
         List<EventGenerator.LogEvent> events = new ArrayList<>();
-        String[] products = {"iPhone 16 Pro", "MacBook Pro M3", "PlayStation 5", "AirPods Pro", "Chuot Logitech MX Master"};
+        String[] products = {"iPhone 16 Pro Max", "MacBook Pro M3", "Tai nghe Sony WH-1000XM5", "Chuot Logitech MX Master 3S", "Laptop Gaming Titan X15"};
+        String[] devices = {
+            "iPhone 16 Pro (iOS)",
+            "Samsung Galaxy S24 (Android)",
+            "MacBook Pro M3 (macOS)",
+            "Dell XPS 15 (Windows 11)",
+            "iPad Pro M4 (iPadOS)"
+        };
+        String[] users = {
+            "trungtin",
+            "minhhoa",
+            "quanghai",
+            "quynhnga",
+            "hoanglong"
+        };
 
         for (int i = 1; i <= count; i++) {
             String now = Instant.now().toString();
             String ip = "192.168.1." + ((i % 150) + 1);
-            String user = "user_" + (1000 + i);
+            String uName = users[i % users.length] + "_" + (100 + (i % 50));
+            String devName = devices[i % devices.length];
             String prod = products[i % products.length];
 
-            // Tinh toan do tre tang dan theo muc do don tai hang doi (15ms -> 600ms)
+            // Tinh toan do tre tang dan khi luu luong don tai:
+            // - Duoi 200ms : INFO (Binh thuong)
+            // - 200ms - 400ms: WARNING (Canh bao nghen luu luong)
+            // - Tren 400ms  : CRITICAL (Nguy hiem - qua tai he thong)
             int latency = 15 + (int) (Math.pow(i, 1.22) * 0.45);
-            String severity = (latency > 400) ? "ERROR" : (latency > 200 ? "WARNING" : "INFO");
+            String severity = (latency > 400) ? "CRITICAL" : (latency > 200 ? "WARNING" : "INFO");
             String eventType = (i % 7 == 0) ? "ADD_TO_CART" : "VIEW_PRODUCT";
 
+            String devWithUser = devName + " [User: " + uName + "]";
             events.add(new EventGenerator.LogEvent(
                     now,
                     severity,
                     eventType,
-                    String.format("User '%s' click '%s' | IP: %s | Latency: %dms", user, prod, ip, latency)
+                    String.format("User '%s' on Device '%s' click '%s' | IP: %s | Latency: %dms", uName, devWithUser, prod, ip, latency),
+                    devWithUser,
+                    "NETWORK"
             ));
         }
 
@@ -98,8 +119,18 @@ public class TrafficSpikeScenario {
                             + (useTcp ? "TCP" : "UDP") + " -> " + ev.getMessage());
                 }
 
+                // Giãn cách ngắn 10ms để tránh cạn kiệt ephemeral port socket trên Windows
+                // và giúp biểu đồ Throughput Wave trên Dashboard hiển thị sóng dâng trào trực quan
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ignored) {}
+
             } catch (IOException e) {
                 System.err.println("[LOI TRUYEN TAI #" + logIndex + "]: " + e.getMessage());
+                if (e instanceof java.net.ConnectException) {
+                    System.err.println("   -> [CHU Y]: Khong the ket noi toi Server!");
+                    System.err.println("   -> Vui long khoi dong ServerMain truoc de mo cong UDP " + UDP_PORT + " va TCP " + TCP_PORT + ".");
+                }
                 System.err.println("Dung gui de bao toan so log con lai trong Queue: " + queue.size());
                 break;
             }

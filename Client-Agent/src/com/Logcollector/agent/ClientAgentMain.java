@@ -5,9 +5,9 @@ import com.Logcollector.agent.Sender.TCPSender;
 import com.Logcollector.agent.Sender.UDPSender;
 import com.Logcollector.agent.demoClientagent.CyberAttackScenario;
 import com.Logcollector.agent.demoClientagent.DemoClientAgent;
-import com.Logcollector.agent.demoClientagent.LoginOfflineScenario;
 import com.Logcollector.agent.demoClientagent.ProductClickScenario;
 import com.Logcollector.agent.demoClientagent.TrafficSpikeScenario;
+import com.Logcollector.agent.demoClientagent.UserSudendlyIncreaseScenario;
 
 import java.io.IOException;
 import java.util.List;
@@ -32,8 +32,11 @@ public class ClientAgentMain {
             case "demo":
                 DemoClientAgent.main(args);
                 return;
+            case "users":
+            case "usersuddenly":
+            case "user-suddenly":
             case "login":
-                LoginOfflineScenario.main(args);
+                UserSudendlyIncreaseScenario.main(args);
                 return;
             case "product":
                 ProductClickScenario.main(args);
@@ -53,7 +56,7 @@ public class ClientAgentMain {
         System.out.println("[CLIENT AGENT] Che do duoc chon: " + mode.toUpperCase(Locale.ROOT));
         System.out.println("[GOI Y CHE DO]:");
         System.out.println("   • auto [n]    : Tu dong phan phoi UDP (514) & TCP (9999) [Mac dinh]");
-        System.out.println("   • login       : Chay LoginOfflineScenario (Demo ngat mang 3s & Queue)");
+        System.out.println("   • users       : Chay UserSudendlyIncreaseScenario (Mo hinh 200 nguoi tang dot bien)");
         System.out.println("   • product     : Chay ProductClickScenario (Demo tuong tac Web san pham)");
         System.out.println("   • spike [n]   : Chay TrafficSpikeScenario (Demo 100-200 request Flash Sale)");
         System.out.println("   • attack      : Chay CyberAttackScenario (Demo Brute-force & Alert)");

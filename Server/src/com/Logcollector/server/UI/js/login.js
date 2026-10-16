@@ -45,7 +45,18 @@
       return;
     }
 
+    function sendLoginToServer(userEmail, success) {
+      try {
+        fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail, success: success })
+        }).catch(() => {});
+      } catch (ignored) {}
+    }
+
     // Capture only the result, never retain the password in a callback or storage.
+    const attemptEmail = email.value;
     const accepted = DemoData.matchesDemoAccount(email.value, password.value);
     password.value = "";
     DemoUI.resetPasswordVisibility(form);
@@ -60,6 +71,7 @@
       submit.disabled = false;
       customerShortcut.disabled = false;
       submit.textContent = "Đăng nhập →";
+      sendLoginToServer(attemptEmail, accepted);
       if (accepted) startSession();
       else {
         DemoData.recordEvent("LOGIN_FAILED");

@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class ProductClickScenario {
 
-    private static final String HOST = "127.0.0.1";
+    private static final String HOST = System.getProperty("server.host", "127.0.0.1");
     private static final int TCP_PORT = 9999;
     private static final int UDP_PORT = 514;
 
@@ -34,17 +34,23 @@ public class ProductClickScenario {
         String now = Instant.now().toString();
 
         events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_PRODUCT",
-                "User 'user_trungtin' viewed 'iPhone 16 Pro Max 256GB' | IP: 192.168.1.10 | Latency: 18ms"));
+                "User 'user_trungtin' on Device 'iPhone 16 Pro (iOS)' viewed 'iPhone 16 Pro Max 256GB' | IP: 192.168.1.10 | Latency: 18ms",
+                "iPhone 16 Pro (iOS) [User: user_trungtin]", "APPLICATION"));
         events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_PRODUCT",
-                "User 'user_minhhoa' viewed 'MacBook Pro M3 Max' | IP: 192.168.1.25 | Latency: 22ms"));
+                "User 'user_minhhoa' on Device 'MacBook Pro M3 (macOS)' viewed 'Laptop MacBook Pro M3 Max' | IP: 192.168.1.25 | Latency: 22ms",
+                "MacBook Pro M3 (macOS) [User: user_minhhoa]", "APPLICATION"));
         events.add(new EventGenerator.LogEvent(now, "INFO", "ADD_TO_CART",
-                "User 'user_quynhnga' added 'Chuot Logitech MX Master 3S' to cart | IP: 192.168.1.33 | Latency: 35ms"));
+                "User 'user_quynhnga' on Device 'Dell XPS 15 (Windows 11)' added 'Chuot Logitech MX Master 3S' to cart | IP: 192.168.1.33 | Latency: 35ms",
+                "Dell XPS 15 (Windows 11) [User: user_quynhnga]", "APPLICATION"));
         events.add(new EventGenerator.LogEvent(now, "INFO", "CHECKOUT_ORDER",
-                "User 'user_quanghai' checkout successful Order #DH-9921 | IP: 192.168.1.40 | Latency: 64ms"));
+                "User 'user_quanghai' on Device 'Samsung Galaxy S24 (Android)' checkout successful Order #DH-9921 | IP: 192.168.1.40 | Latency: 64ms",
+                "Samsung Galaxy S24 (Android) [User: user_quanghai]", "APPLICATION"));
         events.add(new EventGenerator.LogEvent(now, "ERROR", "HTTP_404",
-                "User 'guest_8812' accessed non-existing product link '/sp/san-pham-cu-2022' | IP: 192.168.1.99 | Latency: 12ms"));
+                "User 'guest_8812' on Device 'Windows PC (Chrome)' accessed non-existing product link '/sp/san-pham-cu-2022' | IP: 192.168.1.99 | Latency: 12ms",
+                "Windows PC (Chrome) [User: guest_8812]", "APPLICATION"));
         events.add(new EventGenerator.LogEvent(now, "INFO", "VIEW_PRODUCT",
-                "User 'user_hoanglong' viewed 'Tai nghe Sony WH-1000XM5' | IP: 192.168.1.15 | Latency: 20ms"));
+                "User 'user_hoanglong' on Device 'iPad Pro M4 (iPadOS)' checked status 'Tai nghe Sony WH-1000XM5' | IP: 192.168.1.15 | Latency: 20ms",
+                "iPad Pro M4 (iPadOS) [User: user_hoanglong]", "APPLICATION"));
 
         AgentLocalQueue queue = new AgentLocalQueue();
         for (EventGenerator.LogEvent ev : events) {
