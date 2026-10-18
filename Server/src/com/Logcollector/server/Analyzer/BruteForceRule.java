@@ -34,6 +34,14 @@ public class BruteForceRule {
      * @return true nếu số lần thất bại chạm hoặc vượt ngưỡng cảnh báo, ngược lại false
      */
     public boolean recordLoginFailure(String sourceIp) {
+        return recordLoginFailureAndGetCount(sourceIp) >= failureThreshold;
+    }
+
+    /**
+     * Ghi nhận và trả về chính xác số lần đăng nhập sai của IP trong cửa sổ thời gian
+     * để AnomalyDetector phân cấp cảnh báo (>= 3 lần: WARNING, >= 5 lần: CRITICAL)
+     */
+    public int recordLoginFailureAndGetCount(String sourceIp) {
         long currentTime = System.currentTimeMillis();
 
         FailureRecord record = failureHistory.compute(sourceIp, (ip, existingRecord) -> {
@@ -46,7 +54,7 @@ public class BruteForceRule {
             return existingRecord;
         });
 
-        return record.failureCount.get() >= failureThreshold;
+        return record.failureCount.get();
     }
 
     /**

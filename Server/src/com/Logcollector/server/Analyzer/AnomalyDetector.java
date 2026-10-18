@@ -61,12 +61,15 @@ public class AnomalyDetector {
             return;
         }
 
-        boolean isBruteForce = bruteForceRule.recordLoginFailure(sourceIp);
-        if (isBruteForce) {
-            String message = String.format("Phat hien hanh vi Brute-force mat khau tu IP: %s", sourceIp);
-            triggerAlert("BRUTE_FORCE", sourceIp, message);
-            // Reset để tránh lặp cảnh báo liên tục
+        int failures = bruteForceRule.recordLoginFailureAndGetCount(sourceIp);
+        if (failures >= 5) {
+            String message = String.format("NGUY HIEM [CRITICAL]: Phat hien tan cong Brute-force mat khau tu IP %s (that bai %d lan lien tiep)", sourceIp, failures);
+            triggerAlert("CRITICAL_BRUTE_FORCE", sourceIp, message);
+            // Reset de tranh lap canh bao lien tuc
             bruteForceRule.resetIp(sourceIp);
+        } else if (failures >= 3) {
+            String message = String.format("CANH BAO [WARNING]: Phat hien dang nhap sai bat thuong %d lan lien tiep tu IP %s", failures, sourceIp);
+            triggerAlert("WARNING_LOGIN_ATTEMPT", sourceIp, message);
         }
     }
 

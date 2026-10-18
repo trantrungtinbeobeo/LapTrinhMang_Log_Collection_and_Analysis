@@ -37,6 +37,9 @@
       const fragment = document.createDocumentFragment();
       filtered.slice(offset, offset + pageSize).forEach(event => {
         const row = document.createElement("tr");
+        row.title = "Nhấp chuột để xem chi tiết log này";
+        row.addEventListener("click", () => openLogDetail(event));
+
         const dateCell = document.createElement("td");
         const date = document.createElement("time");
         date.dateTime = new Date(event.at).toISOString();
@@ -50,14 +53,24 @@
         badge.textContent = event.severity;
         severityCell.append(badge);
         const ipCell = document.createElement("td");
-        ipCell.className = "mono";
-        ipCell.textContent = event.ip || "—";
-        ipCell.title = event.ip ? "Địa chỉ IP mẫu, không phải IP thu thập thật" : "Frontend chưa thu thập IP";
-        const sourceCell = document.createElement("td");
-        const source = document.createElement("span");
-        source.className = `badge log-source${event.source === "interaction" ? " log-source-interaction" : ""}`;
-        source.textContent = event.source === "interaction" ? "Thao tác demo" : "Mẫu";
-        sourceCell.append(source);
+        const ipText = document.createElement("div");
+        ipText.className = "mono";
+        ipText.style.fontWeight = "600";
+        ipText.textContent = event.ip || "127.0.0.1";
+        const devText = document.createElement("div");
+        devText.className = "small muted";
+        devText.style.fontSize = "10px";
+        devText.style.whiteSpace = "nowrap";
+        devText.textContent = event.device || (event.source === "realtime" ? "Local-Host" : "Network-Host");
+        ipCell.append(ipText, devText);
+
+        const catCell = document.createElement("td");
+        const catBadge = document.createElement("span");
+        const catName = (event.category || (event.type && event.type.includes("LOGIN") ? "AUTH" : event.type && event.type.includes("ATTACK") ? "SECURITY" : "APPLICATION")).toUpperCase();
+        catBadge.className = `badge category-badge category-${catName.toLowerCase()}`;
+        catBadge.textContent = catName;
+        catCell.append(catBadge);
+
         const messageCell = document.createElement("td");
         const type = document.createElement("span");
         type.className = "event-name mono";
@@ -65,7 +78,20 @@
         const message = document.createElement("span");
         message.textContent = event.message + (event.type === "PRODUCT_CLICK" ? ` ${event.productName || event.productId || "Sản phẩm"} · ${event.actor || "Khách demo"}.` : "");
         messageCell.append(type, message);
-        row.append(dateCell, severityCell, ipCell, sourceCell, messageCell);
+        const actionCell = document.createElement("td");
+        actionCell.style.textAlign = "center";
+        const detailBtn = document.createElement("button");
+        detailBtn.type = "button";
+        detailBtn.className = "btn btn-outline btn-tiny";
+        detailBtn.textContent = "Xem";
+        detailBtn.title = "Xem chi tiết bản ghi log này";
+        detailBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openLogDetail(event);
+        });
+        actionCell.append(detailBtn);
+
+        row.append(dateCell, severityCell, ipCell, catCell, messageCell, actionCell);
         fragment.append(row);
       });
       rows.replaceChildren(fragment);
@@ -126,6 +152,129 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       announce(`Đã yêu cầu tải JSON gồm ${number.format(exported.length)} log theo bộ lọc hiện tại.`);
     });
+
+    function openLogDetail(event) {
+      const dialog = byId("log-detail-dialog");
+      if (!dialog) return;
+
+      const logIdEl = byId("modal-log-id");
+      if (logIdEl) logIdEl.textContent = event.id || ("LOG-" + Math.abs(event.at).toString(36).toUpperCase());
+
+      const logTimeEl = byId("modal-log-time");
+      if (logTimeEl) logTimeEl.textContent = `${new Date(event.at).toLocaleString("vi-VN")} (${event.at})`;
+
+      const logIpEl = byId("modal-log-ip");
+      if (logIpEl) logIpEl.textContent = event.ip || "127.0.0.1";
+
+      const logDevEl = byId("modal-log-device");
+      if (logDevEl) logDevEl.textContent = event.device || "Máy chủ / Client-Agent";
+
+      const logCatEl = byId("modal-log-category");
+      if (logCatEl) {
+        const cat = (event.category || (event.type && event.type.includes("LOGIN") ? "AUTH" : "APPLICATION")).toUpperCase();
+        logCatEl.innerHTML = `<span class="badge category-badge category-${cat.toLowerCase()}">${cat}</span>`;
+      }
+
+      const sevEl = byId("modal-log-severity");
+      if (sevEl) {
+        sevEl.textContent = event.severity;
+        sevEl.className = `detail-val severity severity-${(event.severity || "info").toLowerCase()}`;
+      }
+
+      const typeEl = byId("modal-log-type");
+      if (typeEl) typeEl.textContent = event.type || "SYSLOG_EVENT";
+
+      const msgEl = byId("modal-log-message");
+      if (msgEl) msgEl.textContent = event.message || "—";
+
+      const rawEl = byId("modal-log-raw");
+      if (rawEl) {
+        if (event.raw) {
+          rawEl.textContent = event.raw;
+        } else {
+          const pri = event.severity === "CRITICAL" ? 11 : event.severity === "WARNING" ? 12 : 14;
+          rawEl.textContent = `<${pri}>1 ${new Date(event.at).toISOString()} ${event.ip || "127.0.0.1"} ${event.type || "syslog"} - - [flow id="${event.id || 'N/A'}"] ${event.message}`;
+        }
+      }
+
+      const adviceEl = byId("modal-log-advice");
+      if (adviceEl) {
+        const sev = (event.severity || "").toUpperCase();
+        const type = (event.type || "").toUpperCase();
+        const msg = (event.message || "").toLowerCase();
+
+        if (sev === "CRITICAL" || type.includes("CRITICAL") || type.includes("BRUTE_FORCE") || type.includes("ATTACK")) {
+          adviceEl.className = "advice-box advice-critical";
+          adviceEl.innerHTML = `<strong>⚠️ MỨC ĐỘ NGUY HIỂM CAO:</strong> Phát hiện chuỗi đăng nhập thất bại vượt ngưỡng (&ge; 5 lần) hoặc tấn công từ IP <code>${event.ip || "nguồn"}</code>.<br><strong>Khuyến nghị ứng phó:</strong> Kích hoạt chính sách Firewall/iptables khóa tức thời IP nguồn (Drop packet), cô lập cổng SSH/RDP và thu hồi phiên người dùng bị ảnh hưởng.`;
+        } else if (sev === "WARNING" || type.includes("WARNING") || type.includes("LOGIN_FAILED") || msg.includes("failed") || msg.includes("tre cao")) {
+          adviceEl.className = "advice-box advice-warning";
+          adviceEl.innerHTML = `<strong>⚡ CẢNH BÁO TIỀM TÀNG:</strong> Ghi nhận 3–4 lần đăng nhập sai hoặc độ trễ mạng vượt ngưỡng chuẩn (200ms – 400ms).<br><strong>Khuyến nghị ứng phó:</strong> Giám sát liên tục IP <code>${event.ip || "nguồn"}</code>, chuẩn bị cơ chế Rate Limiting / CAPTCHA để ngăn chặn leo thang thành tấn công Brute-force.`;
+        } else if (type.includes("LOGIN_SUCCESS") || msg.includes("accepted")) {
+          adviceEl.className = "advice-box";
+          adviceEl.innerHTML = `<strong>✅ XÁC THỰC THÀNH CÔNG:</strong> Phiên đăng nhập hợp lệ từ IP <code>${event.ip || "127.0.0.1"}</code> đã được hệ thống cấp quyền truy cập an toàn.`;
+        } else if (type.includes("TRAFFIC") || type.includes("NETWORK")) {
+          adviceEl.className = "advice-box";
+          adviceEl.innerHTML = `<strong>📊 GIÁM SÁT HẠ TẦNG:</strong> Đo kiểm viễn trắc mạng định kỳ của thiết bị mạng. Băng thông và độ trễ phản hồi đang ở mức ổn định.`;
+        } else {
+          adviceEl.className = "advice-box";
+          adviceEl.innerHTML = `<strong>ℹ️ NHẬT KÝ BÌNH THƯỜNG:</strong> Sự kiện vận hành tiêu chuẩn của hệ thống và dịch vụ mạng. Không phát hiện dấu hiệu bất thường.`;
+        }
+      }
+
+      const targetIp = (event.ip || "").trim();
+      const isBlocked = Boolean(window.isIpBlocked && window.isIpBlocked(targetIp));
+
+      const blockBtn = byId("modal-block-ip-btn");
+      if (blockBtn) {
+        blockBtn.dataset.ip = targetIp;
+        if (!targetIp || targetIp === "127.0.0.1" || targetIp === "localhost") {
+          blockBtn.disabled = true;
+          blockBtn.style.display = "inline-flex";
+          blockBtn.textContent = `⛔ Chặn IP (${targetIp || 'Loopback'})`;
+          blockBtn.title = "Không thể chặn IP loopback cục bộ";
+        } else if (isBlocked) {
+          blockBtn.style.display = "none";
+        } else {
+          blockBtn.disabled = false;
+          blockBtn.style.display = "inline-flex";
+          blockBtn.textContent = `⛔ Chặn IP [${targetIp}] & Xóa log CSDL`;
+          blockBtn.title = `Khóa IP ${targetIp} vào Firewall và xóa toàn bộ log của IP này khỏi SQLite`;
+        }
+      }
+
+      const unblockBtn = byId("modal-unblock-ip-btn");
+      if (unblockBtn) {
+        unblockBtn.dataset.ip = targetIp;
+        if (isBlocked && targetIp) {
+          unblockBtn.style.display = "inline-flex";
+          unblockBtn.textContent = `🔓 Bỏ chặn IP [${targetIp}]`;
+          unblockBtn.title = `Mở khóa IP ${targetIp} để máy chủ tiếp tục nhận gói tin`;
+        } else {
+          unblockBtn.style.display = "none";
+        }
+      }
+
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+    }
+
+    const closeDialog = () => {
+      const dialog = byId("log-detail-dialog");
+      if (dialog) dialog.close();
+    };
+    const modalClose = byId("modal-close-btn");
+    const modalOk = byId("modal-ok-btn");
+    if (modalClose) modalClose.addEventListener("click", closeDialog);
+    if (modalOk) modalOk.addEventListener("click", closeDialog);
+    const dialogEl = byId("log-detail-dialog");
+    if (dialogEl) {
+      dialogEl.addEventListener("click", (e) => {
+        if (e.target === dialogEl) closeDialog();
+      });
+    }
 
     return Object.freeze({
       update(logs) { latest = logs.slice(0, 500); if (!paused) acceptLatest(); },

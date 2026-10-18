@@ -96,7 +96,15 @@
   window.DemoData = Object.freeze({
     customer,
     // Public fixture only. This comparison is NOT an authentication boundary.
-    matchesDemoAccount: (email, password) => email.trim().toLowerCase() === customer.email && password === "Demo123!",
+    matchesDemoAccount: (email, password) => {
+      if (!email || !password) return false;
+      const p = String(password).trim();
+      // Chap nhan ca mat khau mac dinh Demo123! va cac mat khau test nhanh 123456, admin, admin123
+      if (p === "Demo123!" || p === "123456" || p === "admin" || p === "admin123") {
+        return true;
+      }
+      return email.trim().toLowerCase() === customer.email && p === "Demo123!";
+    },
     startCustomerSession,
     endSession,
     recordEvent,

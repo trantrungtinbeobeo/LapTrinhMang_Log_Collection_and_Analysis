@@ -67,4 +67,22 @@ public class DatabaseManager {
             System.err.println("[Database] Loi ghi Batch Insert: " + e.getMessage());
         }
     }
+
+    /**
+     * Xoa toan bo log cua dia chi IP bi chan khoi CSDL nham dam bao tinh toan ven
+     */
+    public static int purgeLogsByIp(String ip) {
+        if (ip == null || ip.trim().isEmpty()) return 0;
+        String deleteSQL = "DELETE FROM system_logs WHERE ip_address = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(deleteSQL)) {
+            pstmt.setString(1, ip.trim());
+            int affected = pstmt.executeUpdate();
+            System.out.println("[Database] Da thanh loc xoa " + affected + " log doc hai cua IP bi chan: " + ip);
+            return affected;
+        } catch (SQLException e) {
+            System.err.println("[Database] Loi thanh loc log IP: " + e.getMessage());
+            return 0;
+        }
+    }
 }
