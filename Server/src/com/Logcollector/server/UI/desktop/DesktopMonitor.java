@@ -5,6 +5,7 @@ import javax.swing.event.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.List;
+import java.util.*;
 
 final class DesktopMonitor extends JPanel {
     private final DesktopController controller;
@@ -20,8 +21,6 @@ final class DesktopMonitor extends JPanel {
     private final JComboBox<String> groupLevel = levels(), logLevel = levels();
     private final JComboBox<String> order = new JComboBox<>(new String[]{"Nhiều nhất trước", "Ít nhất trước"});
     private final JTextField groupQuery = new JTextField(22), logQuery = new JTextField(24);
-    private final DesktopTheme.Rows<DesktopStatistics.Ip> ips = new DesktopTheme.Rows<>(new String[]{"IP nguồn", "Số log", "Tỷ lệ"},
-            (r, c) -> c == 0 ? r.address() : r.count());
     private final DesktopTheme.Rows<DesktopStatistics.Group> groups = new DesktopTheme.Rows<>(
             new String[]{"Sự kiện", "Severity", "Số lần", "IP liên quan", "Gần nhất"},
             (r, c) -> switch (c) { case 0 -> r.title(); case 1 -> r.severity(); case 2 -> r.count(); case 3 -> r.ips(); default -> r.latest(); });
@@ -29,6 +28,11 @@ final class DesktopMonitor extends JPanel {
     private final DesktopTheme.Rows<DesktopStatistics.Alert> alerts = new DesktopTheme.Rows<>(
             new String[]{"Thời gian", "Loại cảnh báo / thông báo", "IP", "Nội dung"},
             (r, c) -> switch (c) { case 0 -> r.time(); case 1 -> r.type(); case 2 -> r.ip(); default -> r.message(); });
+
+    // Top IP panel — Stitch-style bars + hover tooltip
+    private List<DesktopStatistics.Ip> displayedIps = List.of();
+    private final JTextField ipSearch = new JTextField();
+    private final IpBarPanel ipBarPanel = new IpBarPanel();
 
     DesktopMonitor(DesktopController controller) {
         super(new BorderLayout()); this.controller = controller;
@@ -54,21 +58,27 @@ final class DesktopMonitor extends JPanel {
         JPanel trafficCard = DesktopTheme.card("Biến động lưu lượng log", "5 phút gần nhất • trục Y tự mở rộng: đỉnh + tối thiểu 100 log/giây", plot);
         trafficCard.setPreferredSize(new Dimension(1000, 300)); trafficCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 320));
         content.add(trafficCard); content.add(Box.createVerticalStrut(12));
-        JTable ipTable = DesktopTheme.table(ips);
-        ips.key = DesktopStatistics.Ip::address;
         groups.key = DesktopStatistics.Group::key;
-        ipTable.getColumnModel().getColumn(2).setCellRenderer((table, value, selected, focus, row, column) -> {
-            JProgressBar bar = new JProgressBar(0, 1000);
-            long max = ips.rows.isEmpty() ? 1 : ips.rows.get(0).count();
-            bar.setValue((int) (((Number) value).longValue() * 1000 / Math.max(1, max))); bar.setForeground(DesktopTheme.BLUE);
-            bar.setStringPainted(true); bar.setString(Math.round(((Number) value).longValue() * 100.0 / Math.max(1, max)) + "%"); return bar;
+
+        // Top IP panel — Stitch-style
+        ipSearch.putClientProperty("JTextField.placeholderText", "Tìm địa chỉ IP…");
+        ipSearch.setName("ip-search");
+        ipSearch.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { filterIps(); }
+            public void removeUpdate(DocumentEvent e) { filterIps(); }
+            public void changedUpdate(DocumentEvent e) { filterIps(); }
         });
-        activate(ipTable, () -> { int i = ipTable.getSelectedRow(); if (i >= 0 && snapshot != null) controller.details(snapshot, ips.rows.get(i).address(), null, this::showDetails); });
-        JScrollPane ipScroll = new JScrollPane(ipTable); ipScroll.setPreferredSize(new Dimension(470, 160));
+        JPanel ipTop = new JPanel(new BorderLayout(0, 8)); ipTop.setOpaque(false);
+        ipTop.add(ipSearch, BorderLayout.NORTH);
+        JScrollPane ipScroll = new JScrollPane(ipBarPanel);
+        ipScroll.setBorder(null); ipScroll.getVerticalScrollBar().setUnitIncrement(18);
+        ipScroll.setPreferredSize(new Dimension(440, 170));
+        ipTop.add(ipScroll);
+
         JPanel middle = new JPanel(new GridLayout(1, 2, 12, 0)); middle.setOpaque(false);
-        middle.add(DesktopTheme.card("Top IP", "10.000 log gần nhất • chọn IP để xem chi tiết", ipScroll));
+        middle.add(DesktopTheme.card("Top IP", "10.000 log gần nhất • rê chuột xem Severity • chọn IP để xem chi tiết", ipTop));
         middle.add(DesktopTheme.card("Phân bố Severity", "Toàn phiên nhận • giữ nguyên mọi mức độ", severity));
-        middle.setPreferredSize(new Dimension(1000, 230)); middle.setMaximumSize(new Dimension(Integer.MAX_VALUE, 245));
+        middle.setPreferredSize(new Dimension(1000, 250)); middle.setMaximumSize(new Dimension(Integer.MAX_VALUE, 265));
         content.addComponentListener(new ComponentAdapter() {
             public void componentResized(ComponentEvent e) {
                 boolean narrow = content.getWidth() < 880;
@@ -76,8 +86,8 @@ final class DesktopMonitor extends JPanel {
                 int columns = narrow ? 1 : 2;
                 if (layout.getColumns() != columns) {
                     layout.setColumns(columns); layout.setRows(narrow ? 2 : 1); layout.setVgap(12);
-                    middle.setPreferredSize(new Dimension(700, narrow ? 460 : 230));
-                    middle.setMaximumSize(new Dimension(Integer.MAX_VALUE, narrow ? 480 : 245)); content.revalidate();
+                    middle.setPreferredSize(new Dimension(700, narrow ? 480 : 250));
+                    middle.setMaximumSize(new Dimension(Integer.MAX_VALUE, narrow ? 500 : 265)); content.revalidate();
                 }
             }
         });
@@ -108,6 +118,16 @@ final class DesktopMonitor extends JPanel {
         groupQuery.getDocument().addDocumentListener(change); logQuery.getDocument().addDocumentListener(change);
         groupLevel.addActionListener(e -> filters()); logLevel.addActionListener(e -> filters()); order.addActionListener(e -> filters());
     }
+
+    /** Filter the displayed IP list by search text; preserves ranking order. */
+    private void filterIps() {
+        if (snapshot == null) return;
+        String q = ipSearch.getText().trim().toLowerCase(Locale.ROOT);
+        displayedIps = q.isEmpty() ? snapshot.ips()
+                : snapshot.ips().stream().filter(ip -> ip.address().toLowerCase(Locale.ROOT).contains(q)).toList();
+        ipBarPanel.setIps(displayedIps, snapshot.ips().isEmpty() ? 1 : snapshot.ips().get(0).count());
+    }
+
     private static JPanel filterBar(JComboBox<String> severity, JTextField query, JComboBox<String> order) {
         JPanel filter = new JPanel(new GridBagLayout()); filter.setOpaque(false);
         GridBagConstraints c = new GridBagConstraints(); c.gridy = 0; c.gridx = 0; c.anchor = GridBagConstraints.WEST;
@@ -129,7 +149,9 @@ final class DesktopMonitor extends JPanel {
         for (int i = 0; i < kpis.length; i++) kpis[i].setText(i == 4 && snapshot.current() == null ? "—" : String.format("%,d", values[i]));
         traffic.update(snapshot); severity.update(snapshot.severity());
         rates.setText(String.format("Hiện tại: %s  |  Trung bình: %,.2f  |  Đỉnh: %,d log/giây  |  Trục Y: 0–%,.0f", snapshot.current() == null ? "—" : snapshot.current(), snapshot.average(), snapshot.peak(), snapshot.axisMax()));
-        ips.set(snapshot.ips()); groups.set(snapshot.groups()); logs.set(snapshot.logs()); alerts.set(snapshot.alerts());
+        // Re-filter IPs preserving search text
+        filterIps();
+        groups.set(snapshot.groups()); logs.set(snapshot.logs()); alerts.set(snapshot.alerts());
         logCount.setText(logs.getRowCount() + " log phù hợp / " + snapshot.retained() + " log đang giữ • Bộ lọc không thay đổi KPI");
         groupCount.setText(groups.getRowCount() + " nhóm phù hợp • Số lần và chi tiết tính trên toàn bộ nhóm");
         alertCount.setText(alerts.getRowCount() + " cảnh báo / thông báo đang giữ");
@@ -161,5 +183,227 @@ final class DesktopMonitor extends JPanel {
     static void showText(String title, String text, Component parent) {
         JTextArea area = new JTextArea(text, 18, 75); area.setEditable(false); area.setLineWrap(true); area.setWrapStyleWord(true); area.setCaretPosition(0);
         JOptionPane.showMessageDialog(parent, new JScrollPane(area), title, JOptionPane.PLAIN_MESSAGE);
+    }
+
+    // ── Stitch-style Top IP bar panel ────────────────────────────────────────
+    /** Custom panel: one row per IP — thin coloured progress bar + severity tooltip on hover. */
+    final class IpBarPanel extends JPanel implements Scrollable {
+        private List<DesktopStatistics.Ip> rows = List.of();
+        private long maxCount = 1;
+        private static final int ROW_H = 46, PAD_X = 10, BAR_H = 4, BAR_Y_OFFSET = 30;
+        private int hoveredRow = -1;
+        private Popup activeTooltip;
+
+        IpBarPanel() {
+            setOpaque(false);
+            setName("ip-bar-panel");
+            MouseAdapter ma = new MouseAdapter() {
+                public void mouseMoved(MouseEvent e) { updateHover(e.getPoint()); }
+                public void mouseExited(MouseEvent e) { clearHover(); }
+                public void mouseClicked(MouseEvent e) { handleClick(e); }
+            };
+            addMouseListener(ma);
+            addMouseMotionListener(ma);
+        }
+
+        void setIps(List<DesktopStatistics.Ip> list, long max) {
+            rows = list; maxCount = Math.max(1, max);
+            setPreferredSize(new Dimension(0, Math.max(1, rows.size()) * ROW_H));
+            revalidate(); repaint();
+        }
+
+        private void updateHover(Point p) {
+            int row = p.y / ROW_H;
+            if (row != hoveredRow) { hoveredRow = (row >= 0 && row < rows.size()) ? row : -1; repaint(); }
+            hideTooltip();
+            if (hoveredRow >= 0) showTooltip(hoveredRow, p);
+        }
+        private void clearHover() { hoveredRow = -1; repaint(); hideTooltip(); }
+
+        private void hideTooltip() { if (activeTooltip != null) { activeTooltip.hide(); activeTooltip = null; } }
+
+        private void showTooltip(int row, Point mouseInPanel) {
+            DesktopStatistics.Ip ip = rows.get(row);
+            JPanel tip = buildTooltipPanel(ip);
+            Point screen = mouseInPanel.getLocation();
+            SwingUtilities.convertPointToScreen(screen, this);
+            // Position above/below depending on space
+            Dimension tipSize = tip.getPreferredSize();
+            int tx = screen.x + 14;
+            int ty = screen.y - tipSize.height - 6;
+            if (ty < 0) ty = screen.y + 18;
+            activeTooltip = PopupFactory.getSharedInstance().getPopup(this, tip, tx, ty);
+            activeTooltip.show();
+        }
+
+        /** Build the floating tooltip panel for one IP entry. */
+        private JPanel buildTooltipPanel(DesktopStatistics.Ip ip) {
+            JPanel panel = new JPanel() {
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(DesktopTheme.SURFACE);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                    g2.setColor(DesktopTheme.BORDER);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
+                    g2.dispose();
+                }
+            };
+            panel.setOpaque(false);
+            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+            panel.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
+
+            // Header: IP + total
+            JPanel header = new JPanel(new BorderLayout(16, 0)); header.setOpaque(false);
+            JLabel ipLabel = new JLabel(ip.address());
+            ipLabel.setFont(ipLabel.getFont().deriveFont(Font.BOLD, 13f));
+            ipLabel.setForeground(DesktopTheme.INK);
+            JLabel total = new JLabel(String.format("%,d log", ip.count()));
+            total.setFont(total.getFont().deriveFont(Font.PLAIN, 12f));
+            total.setForeground(DesktopTheme.MUTED);
+            header.add(ipLabel, BorderLayout.WEST); header.add(total, BorderLayout.EAST);
+            panel.add(header);
+
+            // Divider
+            panel.add(Box.createVerticalStrut(6));
+            JSeparator sep = new JSeparator(); sep.setForeground(DesktopTheme.BORDER); sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+            panel.add(sep);
+            panel.add(Box.createVerticalStrut(6));
+
+            // Severity rows — sorted by count descending
+            Map<String, Long> sev = ip.severity();
+            if (sev.isEmpty()) {
+                JLabel none = new JLabel("Không có dữ liệu Severity");
+                none.setForeground(DesktopTheme.MUTED); none.setFont(none.getFont().deriveFont(11f));
+                panel.add(none);
+            } else {
+                sev.entrySet().stream()
+                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                        .forEach(entry -> {
+                            panel.add(severityRow(entry.getKey(), entry.getValue(), ip.count()));
+                            panel.add(Box.createVerticalStrut(4));
+                        });
+            }
+
+            // Footer: latest time
+            if (!ip.latestTime().isBlank()) {
+                panel.add(Box.createVerticalStrut(6));
+                JSeparator sep2 = new JSeparator(); sep2.setForeground(DesktopTheme.BORDER); sep2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+                panel.add(sep2); panel.add(Box.createVerticalStrut(6));
+                JLabel latest = new JLabel("Gần nhất: " + ip.latestTime());
+                latest.setFont(latest.getFont().deriveFont(Font.PLAIN, 11f));
+                latest.setForeground(DesktopTheme.MUTED);
+                panel.add(latest);
+            }
+            return panel;
+        }
+
+        /** One line: ● SEVERITY    count   (pct%) */
+        private JPanel severityRow(String level, long count, long total) {
+            JPanel row = new JPanel(new BorderLayout(8, 0)); row.setOpaque(false);
+            // Dot + label
+            JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0)); left.setOpaque(false);
+            left.add(new SeverityDot(level));
+            JLabel name = new JLabel(level);
+            name.setFont(name.getFont().deriveFont(Font.PLAIN, 12f));
+            name.setForeground(DesktopTheme.severity(level));
+            left.add(name);
+            // count + pct
+            double pct = total == 0 ? 0 : count * 100.0 / total;
+            JLabel right = new JLabel(String.format("%,d  (%.1f%%)", count, pct));
+            right.setFont(right.getFont().deriveFont(Font.PLAIN, 12f));
+            right.setForeground(DesktopTheme.MUTED);
+            row.add(left, BorderLayout.WEST); row.add(right, BorderLayout.EAST);
+            return row;
+        }
+
+        private void handleClick(MouseEvent e) {
+            int row = e.getY() / ROW_H;
+            if (e.getButton() == MouseEvent.BUTTON1 && row >= 0 && row < rows.size() && snapshot != null) {
+                controller.details(snapshot, rows.get(row).address(), null,
+                        logs -> { hideTooltip(); showDetailsForIp(logs); });
+            }
+        }
+
+        protected void paintComponent(Graphics original) {
+            super.paintComponent(original);
+            Graphics2D g = (Graphics2D) original.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            try {
+                int w = getWidth();
+                long total = rows.isEmpty() ? 1 : maxCount;
+                for (int i = 0; i < rows.size(); i++) {
+                    DesktopStatistics.Ip ip = rows.get(i);
+                    int y = i * ROW_H;
+                    // Hover highlight
+                    if (i == hoveredRow) {
+                        g.setColor(DesktopTheme.STRIPE);
+                        g.fillRoundRect(0, y + 2, w, ROW_H - 4, 8, 8);
+                    }
+                    // IP address text
+                    g.setFont(original.getFont().deriveFont(Font.BOLD, 13f));
+                    g.setColor(DesktopTheme.INK);
+                    g.drawString(ip.address(), PAD_X, y + 17);
+                    // % • count — right aligned
+                    long ipTotal = rows.stream().mapToLong(DesktopStatistics.Ip::count).sum();
+                    double pct = ipTotal == 0 ? 0 : ip.count() * 100.0 / ipTotal;
+                    String meta = String.format("%.0f%%  •  %,d log", pct, ip.count());
+                    g.setFont(original.getFont().deriveFont(Font.PLAIN, 11f));
+                    g.setColor(DesktopTheme.MUTED);
+                    int metaW = g.getFontMetrics().stringWidth(meta);
+                    g.drawString(meta, w - PAD_X - metaW, y + 17);
+                    // Progress bar — thin, rank-coloured
+                    int barMaxW = w - PAD_X * 2;
+                    int barW = (int) (ip.count() * barMaxW / total);
+                    g.setColor(DesktopTheme.BORDER);
+                    g.fillRoundRect(PAD_X, y + BAR_Y_OFFSET, barMaxW, BAR_H, BAR_H, BAR_H);
+                    g.setColor(rankColor(i));
+                    g.fillRoundRect(PAD_X, y + BAR_Y_OFFSET, Math.max(BAR_H, barW), BAR_H, BAR_H, BAR_H);
+                }
+                if (rows.isEmpty()) {
+                    g.setFont(original.getFont().deriveFont(Font.PLAIN, 13f));
+                    g.setColor(DesktopTheme.MUTED);
+                    String msg = "Chưa có dữ liệu phù hợp";
+                    g.drawString(msg, Math.max(12, (w - g.getFontMetrics().stringWidth(msg)) / 2), 34);
+                }
+            } finally { g.dispose(); }
+        }
+
+        /** Bar colour cycles through theme palette by rank. */
+        private Color rankColor(int rank) {
+            return switch (rank % 4) {
+                case 0 -> DesktopTheme.severity("INFO");
+                case 1 -> DesktopTheme.BLUE;
+                case 2 -> DesktopTheme.severity("WARNING");
+                default -> DesktopTheme.MUTED;
+            };
+        }
+
+        // Scrollable — tracks viewport width, natural height
+        public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        public int getScrollableUnitIncrement(Rectangle v, int o, int d) { return ROW_H; }
+        public int getScrollableBlockIncrement(Rectangle v, int o, int d) { return Math.max(ROW_H, v.height - ROW_H); }
+        public boolean getScrollableTracksViewportWidth() { return true; }
+        public boolean getScrollableTracksViewportHeight() { return false; }
+    }
+
+    /** 8×8 filled circle in severity colour, used in the hover tooltip. */
+    private static final class SeverityDot extends JComponent {
+        private final String level;
+        SeverityDot(String level) { this.level = level; setPreferredSize(new Dimension(8, 8)); setOpaque(false); }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(DesktopTheme.severity(level));
+            g2.fillOval(0, 0, 8, 8);
+            g2.dispose();
+        }
+    }
+
+    private void showDetailsForIp(List<DesktopLog> records) {
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Chi tiết • " + records.size() + " log (snapshot)", Dialog.ModalityType.MODELESS);
+        var model = logRows(); model.set(records); JTable table = DesktopTheme.table(model);
+        activate(table, () -> { int i = table.getSelectedRow(); if (i >= 0) showLog(model.rows.get(i), dialog); });
+        dialog.add(new JScrollPane(table)); dialog.setSize(1080, 460); dialog.setLocationRelativeTo(this); dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE); dialog.setVisible(true);
     }
 }

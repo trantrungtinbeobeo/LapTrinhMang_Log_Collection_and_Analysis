@@ -7,7 +7,7 @@ final class DesktopStatistics {
     static final int LOG_LIMIT = 10_000, ALERT_LIMIT = 1_000, WINDOW = 300;
     record Alert(String time, String type, String ip, String message) {}
     record Rate(long second, long count, boolean available) {}
-    record Ip(String address, long count) {}
+    record Ip(String address, long count, Map<String, Long> severity, String latestTime) {}
     record Group(String key, String title, String severity, long count, String ips, String latest) {}
     record Filter(String level, String query, boolean ascending) {
         static Filter all() { return new Filter("Tất cả", "", false); }
@@ -59,6 +59,8 @@ final class DesktopStatistics {
     synchronized Snapshot snapshot(long now, Filter groupFilter, Filter logFilter) {
         advance(now);
         Map<String, Long> ipCounts = new HashMap<>();
+        Map<String, Map<String, Long>> ipSeverity = new HashMap<>();
+        Map<String, String> ipLatest = new HashMap<>();
         Map<String, List<DesktopLog>> grouped = new HashMap<>();
         List<DesktopLog> visible = new ArrayList<>();
         List<DesktopLog> all = new ArrayList<>();
@@ -66,11 +68,17 @@ final class DesktopStatistics {
         while (iterator.hasNext()) {
             DesktopLog log = iterator.next();
             all.add(log);
-            ipCounts.merge(log.event().getIp(), 1L, Long::sum);
+            String ip = log.event().getIp();
+            ipCounts.merge(ip, 1L, Long::sum);
+            ipSeverity.computeIfAbsent(ip, k -> new HashMap<>()).merge(log.event().getSeverityLevel(), 1L, Long::sum);
+            ipLatest.putIfAbsent(ip, log.event().getTimestamp());
             grouped.computeIfAbsent(log.groupKey(), key -> new ArrayList<>()).add(log);
             if (logFilter.accepts(log)) visible.add(log);
         }
-        List<Ip> ips = ipCounts.entrySet().stream().map(e -> new Ip(e.getKey(), e.getValue()))
+        List<Ip> ips = ipCounts.entrySet().stream()
+                .map(e -> new Ip(e.getKey(), e.getValue(),
+                        Map.copyOf(ipSeverity.getOrDefault(e.getKey(), Map.of())),
+                        ipLatest.getOrDefault(e.getKey(), "")))
                 .sorted(Comparator.comparingLong(Ip::count).reversed().thenComparing(Ip::address)).toList();
         List<Group> groups = new ArrayList<>();
         for (var entry : grouped.entrySet()) {

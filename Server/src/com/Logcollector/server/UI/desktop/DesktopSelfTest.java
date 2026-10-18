@@ -45,6 +45,17 @@ public final class DesktopSelfTest {
         var data = snap(s, 1_002_000);
         check(data.groups().get(0).count() == 2 && data.groups().size() == 4, "event grouping ignores timestamp, preserves meaningful numbers");
         check(data.ips().get(0).address().equals("10.0.0.1") && data.ips().get(0).count() == 4, "IP ranking");
+        // ── Giai đoạn 3: Ip severity breakdown và latestTime ──────────────────
+        var top = data.ips().get(0); // 10.0.0.1: WARNING×1, INFO×1, ERROR×2 (4 total)
+        check(top.severity() != null && !top.severity().isEmpty(), "Ip has severity map");
+        long sevSum = top.severity().values().stream().mapToLong(Long::longValue).sum();
+        check(sevSum == top.count(), "severity sum matches IP total count");
+        check(top.severity().getOrDefault("ERROR", 0L) == 2 && top.severity().getOrDefault("INFO", 0L) == 1
+                && top.severity().getOrDefault("WARNING", 0L) == 1, "severity breakdown per-IP correct");
+        check(!top.latestTime().isBlank(), "Ip latestTime is populated");
+        var second = data.ips().get(1); // 10.0.0.2: WARNING×1
+        check(second.severity().getOrDefault("WARNING", 0L) == 1 && second.severity().size() == 1, "second IP severity isolated from first");
+        // ──────────────────────────────────────────────────────────────────────
         var filtered = s.snapshot(1_002_000, new DesktopStatistics.Filter("WARNING", "beta", true), new DesktopStatistics.Filter("ERROR", "42", false));
         check(filtered.groups().size() == 1 && filtered.groups().get(0).count() == 2 && filtered.logs().size() == 1, "combined filters and whole matching group");
         check(filtered.total() == 5 && filtered.allLogs().size() == 5, "filters never affect KPI or frozen details");
@@ -70,6 +81,10 @@ public final class DesktopSelfTest {
         check(limited.total() == 10001 && limited.retained() == 10000 && limited.ipCount() == 1 && limited.groups().size() == 1, "bounded records, exact retained ranking, session counters");
         check(limited.severity().get("INFO") == 1 && limited.severity().get("DEBUG") == 10000, "severity survives detail eviction");
         check(limited.alerts().size() == 1000 && limited.alerts().get(0).message().equals("1004"), "bounded alerts");
+        // ── Giai đoạn 3: rank stability after eviction ────────────────────────
+        var evictedTop = limited.ips().get(0); // 127.0.0.1 DEBUG×10000 (old "old" IP evicted from retained)
+        check(evictedTop.severity().getOrDefault("DEBUG", 0L) == limited.retained(), "severity matches retained after eviction");
+        // ──────────────────────────────────────────────────────────────────────
         DesktopController.Session queue = new DesktopController.Session(true);
         for (int i = 0; i < DesktopController.QUEUE_LIMIT + 3; i++) queue.offer(new DesktopController.Input("x", true, 0));
         check(queue.queue.size() == 20000 && queue.dropped.get() == 3, "bounded input with explicit drops");
