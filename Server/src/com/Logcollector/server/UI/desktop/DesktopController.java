@@ -159,6 +159,34 @@ final class DesktopController implements AutoCloseable {
             });
         } catch (RejectedExecutionException error) { feedback.accept("Hàng đợi gửi đang đầy; thao tác chưa gửi log."); }
     }
+    boolean unblockIp(String ip) {
+        if (ip == null || ip.isBlank()) return false;
+        try {
+            return com.Logcollector.server.ServerMain.unblockIp(ip.trim());
+        } catch (Throwable t) {
+            System.err.println("[Desktop UI] Loi bo chan IP: " + t.getMessage());
+            return false;
+        }
+    }
+
+    int unblockAllIps() {
+        try {
+            return com.Logcollector.server.ServerMain.unblockAllIps();
+        } catch (Throwable t) {
+            System.err.println("[Desktop UI] Loi mo khoa tat ca IP: " + t.getMessage());
+            return 0;
+        }
+    }
+
+    boolean isIpBlocked(String ip) {
+        if (ip == null || ip.isBlank()) return false;
+        try {
+            return com.Logcollector.server.ServerMain.BLOCKED_IPS.contains(ip.trim());
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public void close() {
         closed = true;
         Session target = session;

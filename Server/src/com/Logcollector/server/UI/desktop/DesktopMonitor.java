@@ -95,7 +95,7 @@ final class DesktopMonitor extends JPanel {
         JTable eventTable = DesktopTheme.table(groups), liveTable = DesktopTheme.table(logs), alertTable = DesktopTheme.table(alerts);
         activate(eventTable, () -> { int i = eventTable.getSelectedRow(); if (i >= 0 && snapshot != null) controller.details(snapshot, null, groups.rows.get(i).key(), this::showDetails); });
         activate(liveTable, () -> { int i = liveTable.getSelectedRow(); if (i >= 0) showLog(logs.rows.get(i), this); });
-        activate(alertTable, () -> { int i = alertTable.getSelectedRow(); if (i >= 0) showText("Chi tiết cảnh báo", alerts.rows.get(i).toString(), this); });
+        activate(alertTable, () -> { int i = alertTable.getSelectedRow(); if (i >= 0) showAlertDetails(alerts.rows.get(i)); });
         groupQuery.setName("event-query"); logQuery.setName("log-query");
         groupQuery.putClientProperty("JTextField.placeholderText", "Tìm IP hoặc nội dung sự kiện…");
         logQuery.putClientProperty("JTextField.placeholderText", "Tìm IP hoặc nội dung log…");
@@ -105,7 +105,58 @@ final class DesktopMonitor extends JPanel {
         logsPanel.add(filterBar(logLevel, logQuery, null), BorderLayout.NORTH);
         logsPanel.add(DesktopTheme.card("Log UI đã nhận", "10.000 log gần nhất • mới nhận trước • chọn dòng để đọc đầy đủ", new JScrollPane(liveTable)));
         logsPanel.add(logCount, BorderLayout.SOUTH);
-        alertsPanel.add(DesktopTheme.card("Cảnh báo và thông báo", "Tối đa 1.000 bản tin từ Server • không tự suy đoán tấn công", new JScrollPane(alertTable)));
+
+        // Thanh cong cu Tuong lua mo khoa / bo chan IP tren Desktop App
+        JPanel firewallControlBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        firewallControlBar.setOpaque(false);
+        JButton btnUnblockSelected = DesktopTheme.button("🔓 Bỏ chặn IP đã chọn");
+        JButton btnUnblockAll = DesktopTheme.button("⚡ Mở khóa toàn bộ IP");
+        JLabel hintLabel = DesktopTheme.muted("Chọn dòng cảnh báo có IP để gỡ khỏi Blacklist hoặc Mở khóa toàn bộ");
+        firewallControlBar.add(btnUnblockSelected);
+        firewallControlBar.add(btnUnblockAll);
+        firewallControlBar.add(hintLabel);
+
+        btnUnblockSelected.addActionListener(e -> {
+            int i = alertTable.getSelectedRow();
+            if (i < 0) {
+                JOptionPane.showMessageDialog(this, "Vui lòng chọn một dòng cảnh báo có IP cần gỡ chặn!", "Chưa chọn IP", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            String ip = alerts.rows.get(i).ip();
+            if (ip == null || ip.isBlank() || "—".equals(ip) || "-".equals(ip)) {
+                JOptionPane.showMessageDialog(this, "Dòng cảnh báo được chọn không chứa địa chỉ IP!", "Không có IP", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            boolean removed = controller.unblockIp(ip);
+            if (removed) {
+                JOptionPane.showMessageDialog(this, "Đã mở khóa / bỏ chặn IP " + ip + " khỏi Tường lửa thành công!\nIP này có thể gửi log trở lại bình thường.", "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "IP " + ip + " hiện không nằm trong danh sách đen hoặc đã được mở khóa trước đó.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
+        btnUnblockAll.addActionListener(e -> {
+            int count = controller.unblockAllIps();
+            JOptionPane.showMessageDialog(this, "Đã mở khóa toàn bộ " + count + " IP khỏi danh sách đen Tường lửa!", "Gỡ chặn toàn bộ", JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        JPopupMenu alertPopup = new JPopupMenu();
+        JMenuItem unblockMenuItem = new JMenuItem("🔓 Bỏ chặn IP này khỏi Tường lửa");
+        alertPopup.add(unblockMenuItem);
+        unblockMenuItem.addActionListener(e -> {
+            int i = alertTable.getSelectedRow();
+            if (i >= 0) {
+                String ip = alerts.rows.get(i).ip();
+                if (ip != null && !ip.isBlank() && !"—".equals(ip) && !"-".equals(ip)) {
+                    boolean ok = controller.unblockIp(ip);
+                    JOptionPane.showMessageDialog(this, (ok ? "Đã gỡ chặn IP: " : "IP không bị khóa: ") + ip, "Tường lửa", JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+        });
+        alertTable.setComponentPopupMenu(alertPopup);
+
+        alertsPanel.add(firewallControlBar, BorderLayout.NORTH);
+        alertsPanel.add(DesktopTheme.card("Cảnh báo và thông báo", "Tối đa 1.000 bản tin từ Server • Quản trị viên có thể chọn IP và bấm Bỏ chặn", new JScrollPane(alertTable)), BorderLayout.CENTER);
         alertsPanel.add(alertCount, BorderLayout.SOUTH);
         for (JPanel page : new JPanel[]{logsPanel, eventsPanel, alertsPanel}) page.setBorder(BorderFactory.createEmptyBorder(4, 22, 12, 22));
         liveTable.getColumnModel().getColumn(4).setPreferredWidth(360);
@@ -180,6 +231,46 @@ final class DesktopMonitor extends JPanel {
                 + "\nFacility: " + (log.raw().isBlank() ? "Không được Server cung cấp" : e.getFacility())
                 + "\n\nNội dung:\n" + e.getMessage() + "\n\nRaw:\n" + log.raw(), parent);
     }
+    private void showAlertDetails(DesktopStatistics.Alert alert) {
+        String ip = alert.ip();
+        boolean hasIp = ip != null && !ip.isBlank() && !"—".equals(ip) && !"-".equals(ip);
+        boolean isBlocked = hasIp && controller.isIpBlocked(ip);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Thời gian: ").append(alert.time()).append("\n");
+        sb.append("Loại cảnh báo: ").append(alert.type()).append("\n");
+        sb.append("Địa chỉ IP: ").append(hasIp ? ip : "Không có").append("\n");
+        sb.append("Trạng thái Tường lửa: ").append(isBlocked ? "ĐANG BỊ KHÓA (BLOCKED)" : "Bình thường / Chưa bị khóa").append("\n\n");
+        sb.append("Nội dung chi tiết:\n").append(alert.message());
+
+        JTextArea area = new JTextArea(sb.toString(), 12, 60);
+        area.setEditable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setCaretPosition(0);
+
+        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        panel.add(new JScrollPane(area), BorderLayout.CENTER);
+
+        if (hasIp) {
+            JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            JButton btnUnblock = DesktopTheme.button(isBlocked ? "🔓 Mở khóa / Bỏ chặn IP này" : "🔓 Bỏ chặn IP này khỏi Tường lửa");
+            btnPanel.add(btnUnblock);
+            panel.add(btnPanel, BorderLayout.SOUTH);
+
+            btnUnblock.addActionListener(e -> {
+                boolean ok = controller.unblockIp(ip);
+                if (ok) {
+                    JOptionPane.showMessageDialog(this, "Đã mở khóa / bỏ chặn IP " + ip + " thành công!", "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "IP " + ip + " hiện không nằm trong danh sách đen hoặc đã được mở khóa trước đó.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                }
+            });
+        }
+
+        JOptionPane.showMessageDialog(this, panel, "Chi tiết cảnh báo", JOptionPane.PLAIN_MESSAGE);
+    }
+
     static void showText(String title, String text, Component parent) {
         JTextArea area = new JTextArea(text, 18, 75); area.setEditable(false); area.setLineWrap(true); area.setWrapStyleWord(true); area.setCaretPosition(0);
         JOptionPane.showMessageDialog(parent, new JScrollPane(area), title, JOptionPane.PLAIN_MESSAGE);
