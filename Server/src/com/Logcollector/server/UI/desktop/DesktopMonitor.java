@@ -39,7 +39,7 @@ final class DesktopMonitor extends JPanel {
         JPanel content = new DesktopTheme.ScrollContent(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(4, 22, 20, 22));
         JPanel cards = new JPanel(new GridLayout(1, 6, 10, 0)); cards.setOpaque(false);
-        String[] labels = {"Tổng log nhận", "INFO", "WARNING", "ERROR", "Log/giây", "IP • 10.000 log"};
+        String[] labels = {"Tổng log nhận", "INFO", "WARNING", "ERROR / CRIT", "Log/giây", "IP • 10.000 log"};
         for (int i = 0; i < kpis.length; i++) { kpis[i] = DesktopTheme.title("0", 27); DesktopTheme.foreground(kpis[i], "blue"); cards.add(DesktopTheme.card(labels[i], "", kpis[i])); }
         cards.setMaximumSize(new Dimension(Integer.MAX_VALUE, 94)); content.add(cards); content.add(Box.createVerticalStrut(12));
         content.addComponentListener(new ComponentAdapter() {
@@ -200,7 +200,11 @@ final class DesktopMonitor extends JPanel {
     }
     void update(DesktopController.View view) {
         snapshot = view.data();
-        long[] values = {snapshot.total(), snapshot.severity().getOrDefault("INFO", 0L), snapshot.severity().getOrDefault("WARNING", 0L), snapshot.severity().getOrDefault("ERROR", 0L), snapshot.current() == null ? 0 : snapshot.current(), snapshot.ipCount()};
+        long errorOrCrit = snapshot.severity().getOrDefault("ERROR", 0L)
+                + snapshot.severity().getOrDefault("CRITICAL", 0L)
+                + snapshot.severity().getOrDefault("ALERT", 0L)
+                + snapshot.severity().getOrDefault("EMERGENCY", 0L);
+        long[] values = {snapshot.total(), snapshot.severity().getOrDefault("INFO", 0L), snapshot.severity().getOrDefault("WARNING", 0L), errorOrCrit, snapshot.current() == null ? 0 : snapshot.current(), snapshot.ipCount()};
         for (int i = 0; i < kpis.length; i++) kpis[i].setText(i == 4 && snapshot.current() == null ? "—" : String.format("%,d", values[i]));
         traffic.update(snapshot); severity.update(snapshot.severity());
         rates.setText(String.format("Hiện tại: %s  |  Trung bình: %,.2f  |  Đỉnh: %,d log/giây  |  Trục Y: 0–%,.0f", snapshot.current() == null ? "—" : snapshot.current(), snapshot.average(), snapshot.peak(), snapshot.axisMax()));

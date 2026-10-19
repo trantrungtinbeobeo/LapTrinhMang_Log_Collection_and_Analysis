@@ -140,11 +140,21 @@ public class DatasetReplayScenario {
 
         for (int i = 0; i < rawLogs.size(); i++) {
             String raw = rawLogs.get(i);
+            String rawUpper = raw.toUpperCase();
+            String severity = "INFO";
+            if (rawUpper.contains("BREAK-IN ATTEMPT") || rawUpper.contains("POSSIBLE BREAK-IN")) {
+                severity = "CRITICAL";
+            } else if (rawUpper.contains("FAILED PASSWORD") || rawUpper.contains("AUTHENTICATION FAILURE") || rawUpper.contains("INVALID USER")) {
+                severity = "WARNING";
+            } else if (rawUpper.contains("ACCEPTED PASSWORD") || rawUpper.contains("SESSION OPENED")) {
+                severity = "INFO";
+            }
+
             String nodeIp = "192.168.1." + ((i % 150) + 10);
             String nodeDevice = "Cluster-Node-" + ((i % 16) + 1);
             queue.enqueue(new EventGenerator.LogEvent(
                     now,
-                    "INFO",
+                    severity,
                     "SSH_TRAFFIC",
                     "Cluster node '" + nodeDevice + "' processed traffic: " + raw + " | SourceIP: " + nodeIp,
                     nodeDevice,

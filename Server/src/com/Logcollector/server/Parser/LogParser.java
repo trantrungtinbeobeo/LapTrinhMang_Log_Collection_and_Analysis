@@ -80,6 +80,9 @@ public class LogParser {
             // Xac dinh nhom phan loai (Category)
             String category = determineCategory(rawLog);
 
+            // Chuan hoa muc do nghiem trong (Semantic Normalization) dua tren noi dung log thuc te
+            severityLevel = normalizeSeverity(severityLevel, message);
+
             // Tra ve doi tuong LogEvent da chua du lieu day du
             return new LogEvent(ip, device, category, timestamp, facility, severityLevel, message);
         } else {
@@ -101,10 +104,52 @@ public class LogParser {
                 }
             }
 
+            severityLevel = normalizeSeverity(severityLevel, rawLog);
+
             return new LogEvent(ip, device, category, 
                                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 
                                 facility, severityLevel, rawLog.trim());
         }
+    }
+
+    /**
+     * Chuan hoa muc do nghiem trong (Severity Normalization):
+     * Phan tich ngu nghia noi dung log de xep dung cap do an ninh (CRITICAL, WARNING, ERROR, INFO)
+     */
+    public static String normalizeSeverity(String priSeverity, String content) {
+        if (content == null) return priSeverity != null ? priSeverity : "INFO";
+        String upper = content.toUpperCase();
+
+        // 1. Canh bao ve xam nhap / tan cong nguy hiem -> CRITICAL
+        if (upper.contains("BREAK-IN ATTEMPT") || upper.contains("CRITICAL_BRUTE_FORCE") 
+                || upper.contains("CRITICAL") || upper.contains("POSSIBLE BREAK-IN")) {
+            return "CRITICAL";
+        }
+
+        // 2. Dang nhap that bai, sai mat khau, user khong ton tai -> WARNING
+        if (upper.contains("FAILED PASSWORD") || upper.contains("AUTHENTICATION FAILURE") 
+                || upper.contains("LOGIN_FAILED") || upper.contains("INVALID USER") 
+                || upper.contains("USER UNKNOWN") || upper.contains("PORT_SCAN")) {
+            return "WARNING";
+        }
+
+        // 3. Loi he thong, loi ket noi -> ERROR
+        if (upper.contains("ERROR") || upper.contains("EXCEPTION") || upper.contains("CONNECTION REFUSED") 
+                || upper.contains("DENIED") || upper.contains("FAILURE")) {
+            return "ERROR";
+        }
+
+        // 4. Dang nhap thanh cong, phien ket noi hop le -> INFO
+        if (upper.contains("ACCEPTED PASSWORD") || upper.contains("LOGIN_SUCCESS") || upper.contains("SUCCESSFULLY")) {
+            return "INFO";
+        }
+
+        // 5. Uu tien muc do do PRI mang neu hop le va khac INFO mac dinh
+        if (priSeverity != null && !"INFO".equalsIgnoreCase(priSeverity) && !"UNKNOWN".equalsIgnoreCase(priSeverity)) {
+            return priSeverity;
+        }
+
+        return priSeverity != null ? priSeverity : "INFO";
     }
 
     public static String determineCategory(String text) {
