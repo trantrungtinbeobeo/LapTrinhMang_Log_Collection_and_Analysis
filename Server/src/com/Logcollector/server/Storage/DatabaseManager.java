@@ -13,6 +13,17 @@ public class DatabaseManager {
     private static final String DB_URL = "jdbc:sqlite:logs.db";
 
     /**
+     * Lay ket noi SQLite an toan voi timeout chong khoa CSDL (busy_timeout)
+     */
+    public static Connection getConnection() throws SQLException {
+        Connection conn = DriverManager.getConnection(DB_URL);
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA busy_timeout=5000;");
+        }
+        return conn;
+    }
+
+    /**
      * Khởi tạo bảng CSDL lưu log sự kiện
      */
     public static void initializeDatabase() {
@@ -25,12 +36,14 @@ public class DatabaseManager {
                 + "message TEXT"
                 + ");";
 
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        String createIndexSQL = "CREATE INDEX IF NOT EXISTS idx_system_logs_ip ON system_logs (ip_address);";
+
+        try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA journal_mode=WAL;");
-            stmt.execute("PRAGMA busy_timeout=5000;");
             stmt.execute(createTableSQL);
-            System.out.println("[Database] Da khoi tao CSDL va bang system_logs (SQLite).");
+            stmt.execute(createIndexSQL);
+            System.out.println("[Database] Da khoi tao CSDL, bang system_logs va chi muc IP (SQLite WAL).");
         } catch (SQLException e) {
             System.err.println("[Database] Loi khoi tao CSDL: " + e.getMessage());
         }
@@ -44,7 +57,7 @@ public class DatabaseManager {
 
         String insertSQL = "INSERT INTO system_logs (ip_address, timestamp, facility, severity_level, message) VALUES (?, ?, ?, ?, ?)";
 
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
 
             // Tắt auto-commit để đóng gói toàn bộ lệnh ghi vào một giao dịch (Transaction)
@@ -76,7 +89,7 @@ public class DatabaseManager {
     public static int purgeLogsByIp(String ip) {
         if (ip == null || ip.trim().isEmpty()) return 0;
         String deleteSQL = "DELETE FROM system_logs WHERE ip_address = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(deleteSQL)) {
             pstmt.setString(1, ip.trim());
             int affected = pstmt.executeUpdate();
