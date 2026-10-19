@@ -28,6 +28,7 @@ public class ServerMain {
 
     public static final java.util.Set<String> BLOCKED_IPS = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private static WebSocketServer globalWsServer;
+    private static AnomalyDetector globalDetector;
 
     public static int blockIp(String ip, String reason) {
         if (ip == null || ip.trim().isEmpty() || "127.0.0.1".equals(ip.trim())) return 0;
@@ -53,10 +54,14 @@ public class ServerMain {
         String cleanIp = ip.trim();
         boolean removed = BLOCKED_IPS.remove(cleanIp);
         if (removed) {
+            if (globalDetector != null) {
+                globalDetector.resetIp(cleanIp);
+            }
             System.out.println("\n[FIREWALL UNBLOCK] DA MO KHOA / BO CHAN IP: " + cleanIp);
             if (globalWsServer != null) {
                 String unblockJson = String.format(
-                    "{\"type\":\"IP_UNBLOCKED\",\"ip\":\"%s\",\"timestamp\":\"%s\"}",
+                    "{\"type\":\"IP_UNBLOCKED\",\"ip\":\"%s\",\"message\":\"Da mo khoa / bo chan IP %s\",\"timestamp\":\"%s\"}",
+                    escapeJson(cleanIp),
                     escapeJson(cleanIp),
                     Instant.now().toString()
                 );
@@ -69,10 +74,14 @@ public class ServerMain {
     public static int unblockAllIps() {
         int count = BLOCKED_IPS.size();
         BLOCKED_IPS.clear();
+        if (globalDetector != null) {
+            globalDetector.resetAll();
+        }
         System.out.println("\n[FIREWALL UNBLOCK ALL] DA GO TOAN BO " + count + " IP KHOI BLACKLIST!");
         if (globalWsServer != null) {
             String unblockAllJson = String.format(
-                "{\"type\":\"ALL_IPS_UNBLOCKED\",\"count\":%d,\"timestamp\":\"%s\"}",
+                "{\"type\":\"ALL_IPS_UNBLOCKED\",\"count\":%d,\"ip\":\"ALL\",\"message\":\"Da go toan bo %d IP khoi Blacklist\",\"timestamp\":\"%s\"}",
+                count,
                 count,
                 Instant.now().toString()
             );
@@ -104,6 +113,7 @@ public class ServerMain {
             // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va Bo tong hop bieu do (ChartManager)
             ChartManager chartManager = new ChartManager();
             AnomalyDetector detector = new AnomalyDetector();
+            globalDetector = detector;
             detector.setAlertListener((alertType, sourceIp, alertMessage) -> {
                 System.err.println("\n[CANH BAO AN NINH] [" + alertType + "] IP: " + sourceIp + " -> " + alertMessage);
                 String alertJson = String.format(

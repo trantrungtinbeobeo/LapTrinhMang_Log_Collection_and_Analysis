@@ -123,21 +123,25 @@ final class DesktopMonitor extends JPanel {
                 return;
             }
             String ip = alerts.rows.get(i).ip();
-            if (ip == null || ip.isBlank() || "—".equals(ip) || "-".equals(ip)) {
-                JOptionPane.showMessageDialog(this, "Dòng cảnh báo được chọn không chứa địa chỉ IP!", "Không có IP", JOptionPane.WARNING_MESSAGE);
+            if (ip == null || ip.isBlank() || "—".equals(ip) || "-".equals(ip) || "TẤT CẢ IP".equals(ip)) {
+                JOptionPane.showMessageDialog(this, "Dòng cảnh báo được chọn không chứa địa chỉ IP hợp lệ!", "Không có IP", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            boolean removed = controller.unblockIp(ip);
-            if (removed) {
-                JOptionPane.showMessageDialog(this, "Đã mở khóa / bỏ chặn IP " + ip + " khỏi Tường lửa thành công!\nIP này có thể gửi log trở lại bình thường.", "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
+            boolean ok = controller.unblockIp(ip);
+            if (ok) {
+                JOptionPane.showMessageDialog(this, "Đã gửi lệnh gỡ chặn IP " + ip + " tới Tường lửa Server!\nIP này có thể gửi log trở lại bình thường.", "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
             } else {
-                JOptionPane.showMessageDialog(this, "IP " + ip + " hiện không nằm trong danh sách đen hoặc đã được mở khóa trước đó.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Không thể gửi lệnh gỡ chặn tới Server. Vui lòng kiểm tra kết nối!", "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
             }
         });
 
         btnUnblockAll.addActionListener(e -> {
-            int count = controller.unblockAllIps();
-            JOptionPane.showMessageDialog(this, "Đã mở khóa toàn bộ " + count + " IP khỏi danh sách đen Tường lửa!", "Gỡ chặn toàn bộ", JOptionPane.INFORMATION_MESSAGE);
+            boolean ok = controller.unblockAllIps();
+            if (ok) {
+                JOptionPane.showMessageDialog(this, "Đã gửi lệnh mở khóa toàn bộ IP tới Tường lửa Server thành công!\nToàn bộ danh sách đen Tường lửa trên Server đã được giải phóng.", "Gỡ chặn toàn bộ", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "Không thể gửi lệnh mở khóa tới Server. Vui lòng kiểm tra kết nối!", "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
+            }
         });
 
         JPopupMenu alertPopup = new JPopupMenu();
@@ -147,9 +151,9 @@ final class DesktopMonitor extends JPanel {
             int i = alertTable.getSelectedRow();
             if (i >= 0) {
                 String ip = alerts.rows.get(i).ip();
-                if (ip != null && !ip.isBlank() && !"—".equals(ip) && !"-".equals(ip)) {
+                if (ip != null && !ip.isBlank() && !"—".equals(ip) && !"-".equals(ip) && !"TẤT CẢ IP".equals(ip)) {
                     boolean ok = controller.unblockIp(ip);
-                    JOptionPane.showMessageDialog(this, (ok ? "Đã gỡ chặn IP: " : "IP không bị khóa: ") + ip, "Tường lửa", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, (ok ? "Đã gửi lệnh gỡ chặn IP: " : "Không thể gửi lệnh gỡ chặn IP: ") + ip, "Tường lửa", JOptionPane.INFORMATION_MESSAGE);
                 }
             }
         });

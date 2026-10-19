@@ -56,6 +56,14 @@ final class DesktopStatistics {
         alerts.addFirst(alert);
         if (alerts.size() > ALERT_LIMIT) alerts.removeLast();
     }
+    synchronized void clearBlockedAlerts() {
+        alerts.removeIf(a -> "IP_BLOCKED".equals(a.type()));
+    }
+    synchronized void removeBlockedAlertForIp(String ip) {
+        if (ip != null) {
+            alerts.removeIf(a -> "IP_BLOCKED".equals(a.type()) && ip.equals(a.ip()));
+        }
+    }
     synchronized Snapshot snapshot(long now, Filter groupFilter, Filter logFilter) {
         advance(now);
         Map<String, Long> ipCounts = new HashMap<>();

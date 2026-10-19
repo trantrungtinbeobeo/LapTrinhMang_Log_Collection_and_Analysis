@@ -113,8 +113,16 @@ final class DesktopController implements AutoCloseable {
             String name = type.equals("ALERT") ? DesktopJson.string(data, "alertType") : type;
             String message = DesktopJson.string(data, "message");
             if (message.isEmpty()) message = DesktopJson.string(data, "reason");
-            target.stats.alert(new DesktopStatistics.Alert(DesktopJson.string(data, "timestamp"), name,
-                    DesktopJson.string(data, "ip"), message));
+            String ip = DesktopJson.string(data, "ip");
+            if ("ALL_IPS_UNBLOCKED".equals(type)) {
+                target.stats.clearBlockedAlerts();
+                if (ip.isEmpty()) ip = "TẤT CẢ IP";
+                if (message.isEmpty()) message = "Đã mở khóa toàn bộ IP khỏi danh sách đen Tường lửa!";
+            } else if ("IP_UNBLOCKED".equals(type)) {
+                target.stats.removeBlockedAlertForIp(ip);
+                if (message.isEmpty()) message = "Đã mở khóa IP " + ip;
+            }
+            target.stats.alert(new DesktopStatistics.Alert(DesktopJson.string(data, "timestamp"), name, ip, message));
         }
     }
     void details(DesktopStatistics.Snapshot snapshot, String ip, String group, Consumer<List<DesktopLog>> callback) {
@@ -159,23 +167,39 @@ final class DesktopController implements AutoCloseable {
             });
         } catch (RejectedExecutionException error) { feedback.accept("Hàng đợi gửi đang đầy; thao tác chưa gửi log."); }
     }
-    boolean unblockIp(String ip) {
-        if (ip == null || ip.isBlank()) return false;
-        try {
-            return com.Logcollector.server.ServerMain.unblockIp(ip.trim());
-        } catch (Throwable t) {
-            System.err.println("[Desktop UI] Loi bo chan IP: " + t.getMessage());
-            return false;
+    boolean sendCommand(String jsonCommand) {
+        Session current = session;
+        if (current != null && current.source != null) {
+            return current.source.send(jsonCommand);
         }
+        return false;
     }
 
-    int unblockAllIps() {
+    boolean unblockIp(String ip) {
+        if (ip == null || ip.isBlank()) return false;
+        String cleanIp = ip.trim();
+        boolean localRemoved = false;
         try {
-            return com.Logcollector.server.ServerMain.unblockAllIps();
-        } catch (Throwable t) {
-            System.err.println("[Desktop UI] Loi mo khoa tat ca IP: " + t.getMessage());
-            return 0;
-        }
+            localRemoved = com.Logcollector.server.ServerMain.unblockIp(cleanIp);
+        } catch (Throwable ignored) {}
+
+        String command = String.format("{\"action\":\"UNBLOCK_IP\",\"ip\":\"%s\"}", cleanIp);
+        boolean sent = sendCommand(command);
+
+        return localRemoved || sent;
+    }
+
+    boolean unblockAllIps() {
+        boolean localCalled = false;
+        try {
+            com.Logcollector.server.ServerMain.unblockAllIps();
+            localCalled = true;
+        } catch (Throwable ignored) {}
+
+        String command = "{\"action\":\"UNBLOCK_ALL\"}";
+        boolean sent = sendCommand(command);
+
+        return localCalled || sent;
     }
 
     boolean isIpBlocked(String ip) {

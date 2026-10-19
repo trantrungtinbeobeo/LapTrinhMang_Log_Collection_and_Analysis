@@ -72,6 +72,13 @@ public class BruteForceRule {
         failureHistory.remove(sourceIp);
     }
 
+    /**
+     * Đặt lại toàn bộ lịch sử đăng nhập sai của tất cả IP khi quản trị viên mở khóa Tường lửa
+     */
+    public void resetAll() {
+        failureHistory.clear();
+    }
+
     // Lớp nội bộ theo dõi thời gian và số lần đăng nhập thất bại
     private static class FailureRecord {
         final long startTime;

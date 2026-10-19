@@ -82,6 +82,18 @@ public class AnomalyDetector {
             alertListener.onAlertTriggered(alertType, sourceIp, message);
         }
     }
+
+    public void resetIp(String sourceIp) {
+        if (sourceIp != null) {
+            bruteForceRule.resetIp(sourceIp);
+            portScanRule.resetIp(sourceIp);
+        }
+    }
+
+    public void resetAll() {
+        bruteForceRule.resetAll();
+        portScanRule.resetAll();
+    }
     public static void main(String[] args) {
         System.out.println("=== BAT DAU KIEM THU MODULE ANALYZER (ISSUE #7) ===");
         AnomalyDetector detector = new AnomalyDetector();
