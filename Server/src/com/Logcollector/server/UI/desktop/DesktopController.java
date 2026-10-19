@@ -79,6 +79,13 @@ final class DesktopController implements AutoCloseable {
             while (remaining-- > 0 && (input = current.queue.poll()) != null) {
                 try { consume(current, input); } catch (RuntimeException error) { current.malformed.incrementAndGet(); }
             }
+            try {
+                for (String b : com.Logcollector.server.ServerMain.BLOCKED_IPS) {
+                    if (!current.stats.isBlocked(b)) {
+                        current.stats.blockIp(b, "Đang bị khóa trong Tường lửa Server", "");
+                    }
+                }
+            } catch (Throwable ignored) {}
             var snapshot = current.stats.snapshot(System.currentTimeMillis(), groupFilter, logFilter);
             View view = new View(snapshot, current.status, current.demo, current.dropped.get(), current.malformed.get());
             latest.set(() -> { if (!closed && session == current) update.accept(view); });
@@ -114,15 +121,20 @@ final class DesktopController implements AutoCloseable {
             String message = DesktopJson.string(data, "message");
             if (message.isEmpty()) message = DesktopJson.string(data, "reason");
             String ip = DesktopJson.string(data, "ip");
-            if ("ALL_IPS_UNBLOCKED".equals(type)) {
+            String timestamp = DesktopJson.string(data, "timestamp");
+            if ("IP_BLOCKED".equals(type)) {
+                target.stats.blockIp(ip, message, timestamp);
+            } else if ("ALL_IPS_UNBLOCKED".equals(type)) {
+                target.stats.unblockAll();
                 target.stats.clearBlockedAlerts();
                 if (ip.isEmpty()) ip = "TẤT CẢ IP";
                 if (message.isEmpty()) message = "Đã mở khóa toàn bộ IP khỏi danh sách đen Tường lửa!";
             } else if ("IP_UNBLOCKED".equals(type)) {
+                target.stats.unblockIp(ip);
                 target.stats.removeBlockedAlertForIp(ip);
                 if (message.isEmpty()) message = "Đã mở khóa IP " + ip;
             }
-            target.stats.alert(new DesktopStatistics.Alert(DesktopJson.string(data, "timestamp"), name, ip, message));
+            target.stats.alert(new DesktopStatistics.Alert(timestamp, name, ip, message));
         }
     }
     void details(DesktopStatistics.Snapshot snapshot, String ip, String group, Consumer<List<DesktopLog>> callback) {
@@ -186,6 +198,12 @@ final class DesktopController implements AutoCloseable {
         String command = String.format("{\"action\":\"UNBLOCK_IP\",\"ip\":\"%s\"}", cleanIp);
         boolean sent = sendCommand(command);
 
+        Session current = session;
+        if (current != null) {
+            current.stats.unblockIp(cleanIp);
+            current.stats.removeBlockedAlertForIp(cleanIp);
+        }
+
         return localRemoved || sent;
     }
 
@@ -199,13 +217,24 @@ final class DesktopController implements AutoCloseable {
         String command = "{\"action\":\"UNBLOCK_ALL\"}";
         boolean sent = sendCommand(command);
 
+        Session current = session;
+        if (current != null) {
+            current.stats.unblockAll();
+            current.stats.clearBlockedAlerts();
+        }
+
         return localCalled || sent;
     }
 
     boolean isIpBlocked(String ip) {
         if (ip == null || ip.isBlank()) return false;
+        String cleanIp = ip.trim();
+        Session current = session;
+        if (current != null && current.stats.isBlocked(cleanIp)) {
+            return true;
+        }
         try {
-            return com.Logcollector.server.ServerMain.BLOCKED_IPS.contains(ip.trim());
+            return com.Logcollector.server.ServerMain.BLOCKED_IPS.contains(cleanIp);
         } catch (Throwable t) {
             return false;
         }
