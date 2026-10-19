@@ -21,7 +21,9 @@ public class TCPReceiver implements Runnable {
     @Override
     public void run() {
         try {
-            serverSocket = new ServerSocket(port);
+            serverSocket = new ServerSocket();
+            serverSocket.setReuseAddress(true);
+            serverSocket.bind(new java.net.InetSocketAddress(port));
             System.out.println("[TCP Receiver] Dang lang nghe tren cong TCP " + port + "...");
 
             while (running) {
