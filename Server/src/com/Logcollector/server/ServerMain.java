@@ -6,12 +6,16 @@ import com.Logcollector.server.Core.LogQueue;
 import com.Logcollector.server.Parser.LogEvent;
 import com.Logcollector.server.Parser.LogParser;
 import com.Logcollector.server.RealTime.WebSocketServer;
+import com.Logcollector.server.Storage.DatabaseManager;
 import com.Logcollector.server.UI.ChartManager;
 import com.Logcollector.server.UI.DashboardUI;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -83,6 +87,10 @@ public class ServerMain {
         System.out.println("==================================================");
 
         try {
+            // 0. Khoi tao co so du lieu SQLite (system_logs)
+            System.out.println("[DATABASE] Khoi tao co so du lieu SQLite (system_logs)...");
+            DatabaseManager.initializeDatabase();
+
             // 1. Khoi dong Web Server HTTP (cong 8080) phuc vu Dashboard va WebSocket Server (cong 8085)
             System.out.println("[UI] Dang khoi dong Web Server Dashboard tai cong " + HTTP_PORT + "...");
             DashboardUI dashboardUI = new DashboardUI(HTTP_PORT);
@@ -116,52 +124,74 @@ public class ServerMain {
             // 3. Luong tieu thu log tu LogQueue, boc tach qua LogParser, thong ke va phan tich
             ExecutorService consumer = Executors.newSingleThreadExecutor();
             consumer.submit(() -> {
-                System.out.println("[PIPELINE] San sang lay log tu Queue, boc tach va phat tan...");
+                System.out.println("[PIPELINE] San sang lay log tu Queue, boc tach, luu CSDL va phat tan...");
                 int logIndex = 0;
+                List<LogEvent> dbBatch = new ArrayList<>();
+                long lastDbFlushTime = System.currentTimeMillis();
 
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
-                        String rawLog = LogQueue.take();
-                        logIndex++;
+                        // Cho toi da 200ms de lay log; neu khong co log thi kiem tra moc thoi gian 1 giay de flush DB
+                        String rawLog = LogQueue.poll(200, TimeUnit.MILLISECONDS);
+                        long now = System.currentTimeMillis();
 
-                        // Boc tach va chuan hoa log
-                        LogEvent event = LogParser.parse(rawLog);
+                        if (rawLog != null) {
+                            logIndex++;
 
-                        if (event != null) {
-                            String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
+                            // Boc tach va chuan hoa log
+                            LogEvent event = LogParser.parse(rawLog);
 
-                            // Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
-                            if (BLOCKED_IPS.contains(effectiveIp)) {
-                                System.out.println("[FIREWALL DROP] Tu choi goi tin tu IP da bi khoa: " + effectiveIp);
-                                continue;
+                            if (event != null) {
+                                String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
+
+                                // Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
+                                if (BLOCKED_IPS.contains(effectiveIp)) {
+                                    System.out.println("[FIREWALL DROP] Tu choi goi tin tu IP da bi khoa: " + effectiveIp);
+                                    continue;
+                                }
+
+                                // Dong bo IP hieu dung vao doi tuong LogEvent truoc khi luu CSDL
+                                event.setIp(effectiveIp);
+
+                                // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
+                                chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
+
+                                System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
+                                System.out.println("   -> [PARSED] IP: " + effectiveIp
+                                        + " | Thiet bi: " + event.getDevice()
+                                        + " | Phan loai: [" + event.getCategory() + "]"
+                                        + " | Level: " + event.getSeverityLevel()
+                                        + " | Noi dung: " + event.getMessage());
+
+                                // Kiem tra dau hieu bat thuong (Brute-force login / Port scan)
+                                checkAnomaly(detector, event, rawLog, effectiveIp);
+
+                                // Phat tan log dang JSON qua WebSocket toi Dashboard
+                                String logJson = String.format(
+                                    "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"device\":\"%s\",\"category\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
+                                    logIndex,
+                                    escapeJson(effectiveIp),
+                                    escapeJson(event.getDevice()),
+                                    escapeJson(event.getCategory()),
+                                    escapeJson(event.getTimestamp()),
+                                    escapeJson(event.getSeverityLevel()),
+                                    escapeJson(event.getMessage()),
+                                    escapeJson(rawLog)
+                                );
+                                wsServer.broadcast(logJson);
+
+                                // Dua log hop le vao lo cho ghi xuong CSDL
+                                dbBatch.add(event);
                             }
+                        }
 
-                            // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
-                            chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
-
-                            System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
-                            System.out.println("   -> [PARSED] IP: " + effectiveIp
-                                    + " | Thiet bi: " + event.getDevice()
-                                    + " | Phan loai: [" + event.getCategory() + "]"
-                                    + " | Level: " + event.getSeverityLevel()
-                                    + " | Noi dung: " + event.getMessage());
-
-                            // Kiem tra dau hieu bat thuong (Brute-force login / Port scan)
-                            checkAnomaly(detector, event, rawLog, effectiveIp);
-
-                            // Phat tan log dang JSON qua WebSocket toi Dashboard
-                            String logJson = String.format(
-                                "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"device\":\"%s\",\"category\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
-                                logIndex,
-                                escapeJson(effectiveIp),
-                                escapeJson(event.getDevice()),
-                                escapeJson(event.getCategory()),
-                                escapeJson(event.getTimestamp()),
-                                escapeJson(event.getSeverityLevel()),
-                                escapeJson(event.getMessage()),
-                                escapeJson(rawLog)
-                            );
-                            wsServer.broadcast(logJson);
+                        // Kiem tra dieu kien ghi Batch Insert xuong CSDL SQLite:
+                        // 1. Gom du 50 log
+                        // 2. HOAC da troi qua it nhat 1 giay (1000ms) ke tu lan ghi truoc va dang co log cho
+                        if (dbBatch.size() >= 50 || (!dbBatch.isEmpty() && (now - lastDbFlushTime >= 1000))) {
+                            DatabaseManager.insertLogBatch(new ArrayList<>(dbBatch));
+                            dbBatch.clear();
+                            lastDbFlushTime = now;
                         }
 
                     } catch (InterruptedException e) {
@@ -170,6 +200,12 @@ public class ServerMain {
                     } catch (Exception e) {
                         System.err.println("[PIPELINE ERROR] " + e.getMessage());
                     }
+                }
+
+                // Ghi vet vet toan bo log con sot lai trong lo khi dung chuong trinh
+                if (!dbBatch.isEmpty()) {
+                    DatabaseManager.insertLogBatch(new ArrayList<>(dbBatch));
+                    dbBatch.clear();
                 }
             });
 

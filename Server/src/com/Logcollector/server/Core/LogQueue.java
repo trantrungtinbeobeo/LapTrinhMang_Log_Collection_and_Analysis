@@ -20,6 +20,10 @@ public class LogQueue {
         return queue.poll();
     }
 
+    public static String poll(long timeout, java.util.concurrent.TimeUnit unit) throws InterruptedException {
+        return queue.poll(timeout, unit);
+    }
+
     public static int size() {
         return queue.size();
     }

@@ -27,6 +27,8 @@ public class DatabaseManager {
 
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA journal_mode=WAL;");
+            stmt.execute("PRAGMA busy_timeout=5000;");
             stmt.execute(createTableSQL);
             System.out.println("[Database] Da khoi tao CSDL va bang system_logs (SQLite).");
         } catch (SQLException e) {
