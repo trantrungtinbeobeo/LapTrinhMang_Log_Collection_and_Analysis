@@ -16,7 +16,7 @@ import java.util.Locale;
 public class ClientAgentMain {
 
     private static final int DEFAULT_EVENT_COUNT = 10;
-    private static final String DEFAULT_HOST = "127.0.0.1";
+    private static final String DEFAULT_HOST = System.getProperty("server.host", "192.168.100.71");
     private static final int DEFAULT_TCP_PORT = 9999;
     private static final int DEFAULT_UDP_PORT = 514;
     private static final long RETRY_DELAY_MS = 2000;
