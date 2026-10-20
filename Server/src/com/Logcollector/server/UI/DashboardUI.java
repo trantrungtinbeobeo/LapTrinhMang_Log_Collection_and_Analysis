@@ -33,8 +33,13 @@ public class DashboardUI {
                 content = DesktopFrame.create();
                 frame = new JFrame("Log Collector • Dashboard Java Desktop");
                 frame.setContentPane(content);
-                frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-                frame.addWindowListener(new WindowAdapter() { public void windowClosing(WindowEvent e) { stop(); } });
+                frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+                frame.addWindowListener(new WindowAdapter() {
+                    public void windowClosing(WindowEvent e) {
+                        stop();
+                        System.exit(0);
+                    }
+                });
                 frame.setMinimumSize(new Dimension(1000, 680));
                 Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
                 frame.setSize(Math.min(1380, screen.width - 60), Math.min(1000, screen.height - 70));

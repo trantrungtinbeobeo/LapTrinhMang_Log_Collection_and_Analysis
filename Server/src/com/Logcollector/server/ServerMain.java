@@ -160,7 +160,19 @@ public class ServerMain {
                         long now = System.currentTimeMillis();
 
                         if (rawLog != null) {
-                            // Kiem tra nguong 2.000 log khi chay may chu don le (Chua bat Server 2)
+                            // 1. Boc tach va chuan hoa log truoc
+                            LogEvent event = LogParser.parse(rawLog);
+                            if (event == null) continue;
+
+                            String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
+
+                            // 2. Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
+                            if (BLOCKED_IPS.contains(effectiveIp)) {
+                                System.out.println("[FIREWALL DROP] Tu choi goi tin tu IP da bi khoa: " + effectiveIp);
+                                continue;
+                            }
+
+                            // 3. Kiem tra nguong 2.000 log hop le khi chay may chu don le (Chua bat Server 2)
                             if (logIndex >= MAX_STANDALONE_LOGS && !ClusterSyncCoordinator.isSecondaryConnected()) {
                                 if (!isOverloaded) {
                                     isOverloaded = true;
@@ -196,23 +208,11 @@ public class ServerMain {
                             }
                             broadcastClusterStatus(logIndex);
 
-                            // Boc tach va chuan hoa log
-                            LogEvent event = LogParser.parse(rawLog);
+                            // Dong bo IP hieu dung vao doi tuong LogEvent truoc khi luu CSDL
+                            event.setIp(effectiveIp);
 
-                            if (event != null) {
-                                String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
-
-                                // Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
-                                if (BLOCKED_IPS.contains(effectiveIp)) {
-                                    System.out.println("[FIREWALL DROP] Tu choi goi tin tu IP da bi khoa: " + effectiveIp);
-                                    continue;
-                                }
-
-                                // Dong bo IP hieu dung vao doi tuong LogEvent truoc khi luu CSDL
-                                event.setIp(effectiveIp);
-
-                                // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
-                                chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
+                            // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
+                            chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
 
                                 System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
                                 System.out.println("   -> [PARSED] IP: " + effectiveIp
@@ -243,7 +243,6 @@ public class ServerMain {
 
                                 // Replicate ban sao log sang Server 2 theo thoi gian thuc neu Server 2 dang online
                                 ClusterSyncCoordinator.replicateLog(event);
-                            }
                         }
 
                         // Kiem tra dieu kien ghi Batch Insert xuong CSDL SQLite:
