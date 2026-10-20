@@ -136,8 +136,32 @@ final class DesktopController implements AutoCloseable {
                 target.stats.unblockIp(ip);
                 target.stats.removeBlockedAlertForIp(ip);
                 if (message.isEmpty()) message = "Đã mở khóa IP " + ip;
+            } else if ("SYSTEM_ALERT".equals(type)) {
+                String status = DesktopJson.string(data, "status");
+                if ("OVERLOADED".equals(status)) {
+                    target.stats.updateCluster(new DesktopStatistics.ClusterState(false, true, 2000, 100.0, "OVERLOADED", message, 0, timestamp));
+                } else if ("CLUSTER_ACTIVE".equals(status)) {
+                    target.stats.updateCluster(new DesktopStatistics.ClusterState(true, false, 2000, 100.0, "CLUSTER_ACTIVE", message, -1, timestamp));
+                } else if ("STANDALONE".equals(status)) {
+                    target.stats.updateCluster(new DesktopStatistics.ClusterState(false, false, 2000, 0.0, "STANDALONE_OK", message, 0, timestamp));
+                }
             }
             target.stats.alert(new DesktopStatistics.Alert(timestamp, name, ip, message));
+        } else if (type.equals("CLUSTER_STATUS")) {
+            long limit = 2000;
+            try { limit = Long.parseLong(DesktopJson.string(data, "limit")); } catch (Exception ignored) {}
+            double percent = 0.0;
+            try { percent = Double.parseDouble(DesktopJson.string(data, "percent")); } catch (Exception ignored) {}
+            boolean active = "true".equalsIgnoreCase(DesktopJson.string(data, "clusterActive"));
+            boolean overloaded = "true".equalsIgnoreCase(DesktopJson.string(data, "overloaded"));
+            String status = DesktopJson.string(data, "status");
+            String message = DesktopJson.string(data, "message");
+            int synced = 0;
+            try { synced = Integer.parseInt(DesktopJson.string(data, "secondarySynced")); } catch (Exception ignored) {}
+            String timestamp = DesktopJson.string(data, "timestamp");
+            if (timestamp.isEmpty()) timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+            target.stats.updateCluster(new DesktopStatistics.ClusterState(active, overloaded, (int) limit, percent, status, message, synced, timestamp));
         }
     }
     void details(DesktopStatistics.Snapshot snapshot, String ip, String group, Consumer<List<DesktopLog>> callback) {

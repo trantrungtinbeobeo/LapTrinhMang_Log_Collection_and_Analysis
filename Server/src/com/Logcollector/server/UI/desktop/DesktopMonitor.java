@@ -44,11 +44,13 @@ final class DesktopMonitor extends JPanel {
     private List<DesktopStatistics.Ip> displayedIps = List.of();
     private final JTextField ipSearch = new JTextField();
     private final IpBarPanel ipBarPanel = new IpBarPanel();
+    private final ClusterCapacityPanel clusterPanel = new ClusterCapacityPanel();
 
     DesktopMonitor(DesktopController controller) {
         super(new BorderLayout()); this.controller = controller;
         JPanel content = new DesktopTheme.ScrollContent(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(4, 22, 20, 22));
+        content.add(clusterPanel); content.add(Box.createVerticalStrut(12));
         JPanel cards = new JPanel(new GridLayout(1, 6, 10, 0)); cards.setOpaque(false);
         String[] labels = {"Tổng log nhận", "INFO", "WARNING", "ERROR / CRIT", "Log/giây", "IP • 10.000 log"};
         for (int i = 0; i < kpis.length; i++) { kpis[i] = DesktopTheme.title("0", 27); DesktopTheme.foreground(kpis[i], "blue"); cards.add(DesktopTheme.card(labels[i], "", kpis[i])); }
@@ -332,6 +334,7 @@ final class DesktopMonitor extends JPanel {
                 + snapshot.severity().getOrDefault("EMERGENCY", 0L);
         long[] values = {snapshot.total(), snapshot.severity().getOrDefault("INFO", 0L), snapshot.severity().getOrDefault("WARNING", 0L), errorOrCrit, snapshot.current() == null ? 0 : snapshot.current(), snapshot.ipCount()};
         for (int i = 0; i < kpis.length; i++) kpis[i].setText(i == 4 && snapshot.current() == null ? "—" : String.format("%,d", values[i]));
+        clusterPanel.update(snapshot);
         traffic.update(snapshot); severity.update(snapshot.severity());
         rates.setText(String.format("Hiện tại: %s  |  Trung bình: %,.2f  |  Đỉnh: %,d log/giây  |  Trục Y: 0–%,.0f", snapshot.current() == null ? "—" : snapshot.current(), snapshot.average(), snapshot.peak(), snapshot.axisMax()));
         // Re-filter IPs preserving search text
@@ -856,5 +859,216 @@ final class DesktopMonitor extends JPanel {
         var model = logRows(); model.set(records); JTable table = DesktopTheme.table(model);
         activate(table, () -> { int i = table.getSelectedRow(); if (i >= 0) showLog(model.rows.get(i), dialog); });
         dialog.add(new JScrollPane(table)); dialog.setSize(1080, 460); dialog.setLocationRelativeTo(this); dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE); dialog.setVisible(true);
+    }
+
+    static final class ClusterCapacityPanel extends JPanel {
+        private final JLabel titleLabel = new JLabel("⚡ DUNG LƯỢNG SERVER 1 & TRẠNG THÁI CỤM 2 SERVER");
+        private final JLabel statusBadge = new JLabel(" STANDALONE (AN TOÀN) ");
+        private final JLabel timeLabel = new JLabel("🕒 —");
+        private final JLabel countLabel = new JLabel("Tiến độ: 0 / 2,000 log (0.0%)");
+        private final JLabel node2Label = new JLabel("Server 2: ⛔ Offline (Chưa kết nối)");
+        private final CapacityBar progressBar = new CapacityBar();
+        private final JLabel hintLabel = new JLabel("💡 Hệ thống đang chạy ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.");
+        private final JPanel hintBox = new JPanel(new BorderLayout());
+
+        ClusterCapacityPanel() {
+            super(new BorderLayout(0, 8));
+            DesktopTheme.surface(this);
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(DesktopTheme.BORDER, 1, true),
+                    BorderFactory.createEmptyBorder(12, 16, 12, 16)
+            ));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 155));
+
+            titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+            titleLabel.setForeground(DesktopTheme.INK);
+
+            statusBadge.setFont(statusBadge.getFont().deriveFont(Font.BOLD, 11f));
+            statusBadge.setOpaque(true);
+            statusBadge.setBackground(new Color(0x10b981));
+            statusBadge.setForeground(Color.WHITE);
+            statusBadge.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+
+            timeLabel.setFont(timeLabel.getFont().deriveFont(11f));
+            timeLabel.setForeground(DesktopTheme.MUTED);
+
+            JPanel top = new JPanel(new BorderLayout(8, 0));
+            top.setOpaque(false);
+            JPanel topLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            topLeft.setOpaque(false);
+            topLeft.add(titleLabel);
+            topLeft.add(statusBadge);
+            top.add(topLeft, BorderLayout.WEST);
+            top.add(timeLabel, BorderLayout.EAST);
+
+            countLabel.setFont(countLabel.getFont().deriveFont(Font.BOLD, 15f));
+            countLabel.setForeground(new Color(0x10b981));
+
+            node2Label.setFont(node2Label.getFont().deriveFont(Font.BOLD, 12f));
+            node2Label.setForeground(DesktopTheme.MUTED);
+
+            JPanel mid = new JPanel(new BorderLayout(8, 0));
+            mid.setOpaque(false);
+            mid.add(countLabel, BorderLayout.WEST);
+            mid.add(node2Label, BorderLayout.EAST);
+
+            progressBar.setPreferredSize(new Dimension(800, 14));
+
+            hintBox.setOpaque(true);
+            hintBox.setBackground(new Color(0x10, 0xb9, 0x81, 24));
+            hintBox.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(0x10, 0xb9, 0x81, 80), 1, true),
+                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
+            ));
+            hintLabel.setFont(hintLabel.getFont().deriveFont(12f));
+            hintLabel.setForeground(DesktopTheme.INK);
+            hintBox.add(hintLabel, BorderLayout.CENTER);
+
+            JPanel center = new JPanel();
+            center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+            center.setOpaque(false);
+            center.add(mid);
+            center.add(Box.createVerticalStrut(6));
+            center.add(progressBar);
+            center.add(Box.createVerticalStrut(8));
+            center.add(hintBox);
+
+            add(top, BorderLayout.NORTH);
+            add(center, BorderLayout.CENTER);
+        }
+
+        void update(DesktopStatistics.Snapshot snapshot) {
+            if (snapshot == null) return;
+            DesktopStatistics.ClusterState cs = snapshot.cluster();
+            long total = snapshot.total();
+            int limit = cs.limit() > 0 ? cs.limit() : 2000;
+            boolean active = cs.active();
+            boolean overloaded = cs.overloaded() || (!active && total >= limit);
+            double percent = active ? 100.0 : Math.min(100.0, (total * 100.0) / limit);
+
+            String timeStr = (cs.timestamp() != null && !cs.timestamp().isBlank()) ? cs.timestamp() :
+                    java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            timeLabel.setText("🕒 " + timeStr);
+
+            Color color;
+            String badgeText;
+            Color badgeBg;
+            Color hintBorder;
+            Color hintBg;
+            String hintText;
+
+            if (active) {
+                color = new Color(0x0284c7);
+                badgeText = " 🟢 CỤM 2 SERVER HOẠT ĐỘNG (SCALE-OUT KHÔNG GIỚI HẠN) ";
+                badgeBg = new Color(0x0284c7);
+                hintBorder = new Color(0x02, 0x84, 0xc7, 100);
+                hintBg = new Color(0x02, 0x84, 0xc7, 24);
+                hintText = (cs.message() != null && !cs.message().isBlank()) ? cs.message()
+                        : "🟢 CỤM 2 SERVER ĐANG ĐỒNG BỘ: Toàn bộ dữ liệu sao lưu sang ServerBackup (logs_backup.db). Giới hạn 2.000 log đã được dỡ bỏ!";
+                countLabel.setText(String.format("%,d log • CỤM 2 SERVER ĐANG MỞ RỘNG TỰ DO", total));
+                int syn = cs.secondarySynced() > 0 ? cs.secondarySynced() : (int) total;
+                node2Label.setText(String.format("Server 2: 🟢 Online • logs_backup.db (%,d log)", syn));
+                node2Label.setForeground(new Color(0x10b981));
+            } else if (overloaded) {
+                color = new Color(0xef4444);
+                badgeText = " 🛑 SERVER 1 QUÁ TẢI (CIRCUIT BREAKER - ĐỢI SERVER 2) ";
+                badgeBg = new Color(0xdc2626);
+                hintBorder = new Color(0xdc, 0x26, 0x26, 120);
+                hintBg = new Color(0xdc, 0x26, 0x26, 30);
+                hintText = "🛑 SERVER 1 QUÁ TẢI (ĐÃ ĐẠT 2.000 LOG) - Tạm dừng nạp CSDL để bảo vệ hệ thống. Đang đợi Server 2 được mở để giải phóng...";
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (100.0%%) - QUÁ TẢI", total, limit));
+                node2Label.setText("Server 2: ⚠️ Offline (Cần mở ServerBackupMain để cứu nguy!)");
+                node2Label.setForeground(new Color(0xef4444));
+            } else if (percent >= 85.0) {
+                color = new Color(0xf97316);
+                badgeText = " ⚡ SẮP VƯỢT NGƯỠNG (HÃY BẬT SERVER 2) ";
+                badgeBg = new Color(0xea580c);
+                hintBorder = new Color(0xea, 0x58, 0x0c, 100);
+                hintBg = new Color(0xea, 0x58, 0x0c, 24);
+                hintText = String.format("⚡ SẮP VƯỢT NGƯỠNG 2.000 LOG (%.1f%%)! Vui lòng khởi động Server 2 (ServerBackupMain) để mở rộng dung lượng và tránh nghẽn!", percent);
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (%.1f%%)", total, limit, percent));
+                node2Label.setText("Server 2: ⛔ Offline (Chưa kết nối)");
+                node2Label.setForeground(DesktopTheme.MUTED);
+            } else if (percent >= 60.0) {
+                color = new Color(0xf59e0b);
+                badgeText = " ⚠️ TẢI TĂNG CAO (CHUẨN BỊ SERVER 2) ";
+                badgeBg = new Color(0xd97706);
+                hintBorder = new Color(0xd9, 0x77, 0x06, 100);
+                hintBg = new Color(0xd9, 0x77, 0x06, 24);
+                hintText = String.format("⚠️ Lưu lượng log đang tăng cao (%.1f%%). Chuẩn bị sẵn sàng Server 2 để phân tải khi cần.", percent);
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (%.1f%%)", total, limit, percent));
+                node2Label.setText("Server 2: ⛔ Offline (Chưa kết nối)");
+                node2Label.setForeground(DesktopTheme.MUTED);
+            } else {
+                color = new Color(0x10b981);
+                badgeText = " STANDALONE (AN TOÀN) ";
+                badgeBg = new Color(0x059669);
+                hintBorder = new Color(0x05, 0x96, 0x69, 100);
+                hintBg = new Color(0x05, 0x96, 0x69, 24);
+                hintText = "💡 Hệ thống đang chạy ổn định ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.";
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (%.1f%%)", total, limit, percent));
+                node2Label.setText("Server 2: ⛔ Offline (Chưa kết nối)");
+                node2Label.setForeground(DesktopTheme.MUTED);
+            }
+
+            countLabel.setForeground(color);
+            statusBadge.setText(badgeText);
+            statusBadge.setBackground(badgeBg);
+            hintLabel.setText(hintText);
+            hintBox.setBackground(hintBg);
+            hintBox.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(hintBorder, 1, true),
+                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
+            ));
+
+            progressBar.setProgress(percent, color, active);
+            repaint();
+        }
+    }
+
+    static final class CapacityBar extends JComponent {
+        private double percent = 0.0;
+        private Color barColor = new Color(0x10b981);
+        private boolean isCluster = false;
+
+        void setProgress(double percent, Color color, boolean isCluster) {
+            this.percent = Math.max(0.0, Math.min(100.0, percent));
+            this.barColor = color;
+            this.isCluster = isCluster;
+            repaint();
+        }
+
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = getWidth(), h = getHeight();
+                int arc = h;
+
+                // Nen xam
+                g2.setColor(new Color(0x80, 0x80, 0x80, 40));
+                g2.fillRoundRect(0, 0, w, h, arc, arc);
+
+                // Thanh fill tien do
+                int fillW = (int) Math.round((w * percent) / 100.0);
+                if (fillW > 0) {
+                    if (isCluster) {
+                        GradientPaint gp = new GradientPaint(0, 0, new Color(0x06b6d4), fillW, 0, new Color(0x6366f1));
+                        g2.setPaint(gp);
+                    } else {
+                        GradientPaint gp = new GradientPaint(0, 0, barColor.brighter(), fillW, 0, barColor);
+                        g2.setPaint(gp);
+                    }
+                    g2.fillRoundRect(0, 0, fillW, h, arc, arc);
+                }
+
+                // Vien ngoai
+                g2.setColor(new Color(0x80, 0x80, 0x80, 60));
+                g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+            } finally {
+                g2.dispose();
+            }
+        }
     }
 }
