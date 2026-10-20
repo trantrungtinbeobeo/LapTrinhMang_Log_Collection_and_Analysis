@@ -117,7 +117,7 @@ public class ServerBackupMain {
 
                     String line;
                     while (running && (line = reader.readLine()) != null) {
-                        handleIncomingClusterMessage(line);
+                        handleIncomingClusterMessage(line, writer);
 
                         if (System.currentTimeMillis() - lastHeartbeat >= 5000) {
                             writer.println("{\"action\":\"" + ClusterProtocol.ACTION_HEARTBEAT + "\"}");
@@ -137,7 +137,9 @@ public class ServerBackupMain {
         }
     }
 
-    private static void handleIncomingClusterMessage(String json) {
+    private static int totalSyncedLogs = 0;
+
+    private static void handleIncomingClusterMessage(String json, PrintWriter writer) {
         if (json == null || json.isBlank()) return;
 
         if (json.contains(ClusterProtocol.ACTION_CLUSTER_ACK)) {
@@ -150,7 +152,12 @@ public class ServerBackupMain {
             List<LogEvent> batch = parseLogBatch(json);
             if (!batch.isEmpty()) {
                 BackupDatabaseManager.insertLogBatch(batch);
-                System.out.println("[CLUSTER SYNC] Da dong bo " + batch.size() + " log ban dau tu Server 1 vao CSDL Server 2.");
+                totalSyncedLogs += batch.size();
+                printBackupProgress(totalSyncedLogs, "ĐANG ĐỒNG BỘ CSDL TỪ SERVER 1");
+                if (writer != null) {
+                    writer.println(String.format("{\"action\":\"%s\",\"synced\":%d}",
+                            ClusterProtocol.ACTION_SYNC_PROGRESS, totalSyncedLogs));
+                }
             }
             return;
         }
@@ -160,9 +167,23 @@ public class ServerBackupMain {
             LogEvent ev = parseSingleLogEvent(json);
             if (ev != null) {
                 BackupDatabaseManager.insertSingleLog(ev);
-                System.out.println("[REPLICATION STREAM] Da nhan ban sao log thoi gian thuc: " + ev.getIp() + " | " + ev.getMessage());
+                totalSyncedLogs++;
+                printBackupProgress(totalSyncedLogs, "NHÂN BẢN THỜI GIAN THỰC (REPLICATION)");
+                if (writer != null && totalSyncedLogs % 10 == 0) {
+                    writer.println(String.format("{\"action\":\"%s\",\"synced\":%d}",
+                            ClusterProtocol.ACTION_SYNC_PROGRESS, totalSyncedLogs));
+                }
             }
         }
+    }
+
+    private static void printBackupProgress(int count, String stage) {
+        String time = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        int barLength = 20;
+        int fill = Math.min(barLength, (count * barLength) / 2000);
+        String bar = "█".repeat(Math.max(0, fill)) + "░".repeat(Math.max(0, barLength - fill));
+        System.out.printf("[%s] [SERVER 2 BACKUP] [%s] %,d logs trong logs_backup.db | %s%n",
+                time, bar, count, stage);
     }
 
     private static List<LogEvent> parseLogBatch(String json) {
