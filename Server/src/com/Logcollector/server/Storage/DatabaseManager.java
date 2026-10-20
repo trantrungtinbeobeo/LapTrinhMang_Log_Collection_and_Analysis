@@ -3,8 +3,10 @@ package com.Logcollector.server.Storage;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import com.Logcollector.server.Parser.LogEvent;
 
@@ -99,5 +101,46 @@ public class DatabaseManager {
             System.err.println("[Database] Loi thanh loc log IP: " + e.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * Lay tong so luong log dang luu trong CSDL
+     */
+    public static int getTotalLogCount() {
+        String sql = "SELECT COUNT(*) FROM system_logs";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            System.err.println("[Database] Loi dem log: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    /**
+     * Lay danh sach log de phuc vu dong bo sang Server 2
+     */
+    public static List<LogEvent> getRecentLogs(int limit) {
+        List<LogEvent> list = new ArrayList<>();
+        String sql = "SELECT ip_address, timestamp, facility, severity_level, message FROM system_logs ORDER BY id ASC LIMIT ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, limit);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new LogEvent(
+                        rs.getString("ip_address"),
+                        rs.getString("timestamp"),
+                        rs.getInt("facility"),
+                        rs.getString("severity_level"),
+                        rs.getString("message")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[Database] Loi doc danh sach log dong bo: " + e.getMessage());
+        }
+        return list;
     }
 }

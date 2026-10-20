@@ -23,11 +23,16 @@ import java.util.concurrent.Executors;
 public class ClusterSyncCoordinator {
 
     private static volatile boolean secondaryConnected = false;
+    private static volatile int secondarySyncedCount = 0;
     private static volatile PrintWriter secondaryWriter = null;
     private static ServerSocket serverSocket;
     private static ExecutorService threadPool;
     private static WebSocketServer wsServerRef;
     private static Runnable onClusterExpandedCallback;
+
+    public static int getSecondarySyncedCount() {
+        return secondarySyncedCount;
+    }
 
     public static synchronized void start(int syncPort, WebSocketServer wsServer, Runnable onClusterExpanded) {
         if (threadPool != null && !threadPool.isShutdown()) return;
@@ -91,9 +96,15 @@ public class ClusterSyncCoordinator {
             }
 
             // Vong lap giu ket noi va nhan phan hoi tu Server 2
+            java.util.regex.Pattern progressPattern = java.util.regex.Pattern.compile("\"synced\"\\s*:\\s*(\\d+)");
             while ((line = reader.readLine()) != null) {
                 if (line.contains(ClusterProtocol.ACTION_HEARTBEAT)) {
                     writer.println("{\"action\":\"HEARTBEAT_ACK\"}");
+                } else if (line.contains(ClusterProtocol.ACTION_SYNC_PROGRESS)) {
+                    java.util.regex.Matcher m = progressPattern.matcher(line);
+                    if (m.find()) {
+                        try { secondarySyncedCount = Integer.parseInt(m.group(1)); } catch (Exception ignored) {}
+                    }
                 }
             }
 
@@ -114,6 +125,7 @@ public class ClusterSyncCoordinator {
         List<LogEvent> currentLogs = DatabaseManager.getRecentLogs(2500);
         if (currentLogs.isEmpty()) {
             System.out.println("[CLUSTER SYNC] Server 1 chua co log de dong bo sang Server 2.");
+            secondarySyncedCount = 0;
             return;
         }
 
@@ -138,7 +150,8 @@ public class ClusterSyncCoordinator {
             json.append("]}");
             writer.println(json.toString());
         }
-        System.out.println("[CLUSTER SYNC] Hoan tat dong bo du lieu ban dau sang Server 2!");
+        secondarySyncedCount = currentLogs.size();
+        System.out.println("[CLUSTER SYNC] Hoan tat dong bo " + secondarySyncedCount + " log ban dau sang Server 2!");
     }
 
     /**
@@ -148,6 +161,7 @@ public class ClusterSyncCoordinator {
         PrintWriter writer = secondaryWriter;
         if (secondaryConnected && writer != null && event != null) {
             try {
+                secondarySyncedCount++;
                 String streamJson = String.format("{\"action\":\"%s\",\"ip\":\"%s\",\"timestamp\":\"%s\",\"facility\":%d,\"level\":\"%s\",\"message\":\"%s\"}",
                         ClusterProtocol.ACTION_REPLICATE_LOG,
                         ClusterProtocol.escapeJson(event.getIp()),
