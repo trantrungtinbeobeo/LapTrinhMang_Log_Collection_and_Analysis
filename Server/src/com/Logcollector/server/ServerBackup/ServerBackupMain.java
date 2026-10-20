@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
  */
 public class ServerBackupMain {
 
-    private static String primaryHost = "127.0.0.1";
+    private static String primaryHost = System.getProperty("primary.host", "192.168.100.71");
     private static int primarySyncPort = ClusterProtocol.DEFAULT_SYNC_PORT;
     private static int backupUdpPort = 515;
     private static int backupTcpPort = 9998;
