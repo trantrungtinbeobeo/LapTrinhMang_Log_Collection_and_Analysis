@@ -25,6 +25,7 @@ public class ServerMain {
     public static final int MAX_STANDALONE_LOGS = 2000;
     public static final int SYNC_PORT = ClusterProtocol.DEFAULT_SYNC_PORT;
     public static volatile boolean isOverloaded = false;
+    public static volatile int currentLogCount = 0;
 
     private static final int UDP_PORT = 514;
     private static final int TCP_PORT = 9999;
@@ -120,6 +121,7 @@ public class ServerMain {
             ClusterSyncCoordinator.start(SYNC_PORT, wsServer, () -> {
                 isOverloaded = false;
                 System.out.println("\n[SERVER 1] DA KET NOI VOI SERVER 2! GIOI HAN 2.000 LOG DUOC GO BO HOAN TOAN.\n");
+                broadcastClusterStatus(currentLogCount);
             });
 
             // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va Bo tong hop bieu do (ChartManager)
@@ -175,7 +177,9 @@ public class ServerMain {
                                             logIndex, MAX_STANDALONE_LOGS
                                         );
                                         globalWsServer.broadcast(overloadJson);
+                                        broadcastClusterStatus(logIndex);
                                     }
+                                    printProgressBadge(logIndex, MAX_STANDALONE_LOGS, true, false);
                                 }
                                 continue;
                             }
@@ -185,6 +189,12 @@ public class ServerMain {
                             }
 
                             logIndex++;
+                            currentLogCount = logIndex;
+
+                            if (logIndex % 25 == 0 || logIndex == 1200 || logIndex == 1700 || logIndex >= MAX_STANDALONE_LOGS) {
+                                printProgressBadge(logIndex, MAX_STANDALONE_LOGS, isOverloaded, ClusterSyncCoordinator.isSecondaryConnected());
+                            }
+                            broadcastClusterStatus(logIndex);
 
                             // Boc tach va chuan hoa log
                             LogEvent event = LogParser.parse(rawLog);
@@ -340,5 +350,62 @@ public class ServerMain {
             }
         }
         return sb.toString();
+    }
+
+    public static void broadcastClusterStatus(int currentLogs) {
+        if (globalWsServer == null) return;
+        boolean clusterActive = ClusterSyncCoordinator.isSecondaryConnected();
+        double percent = Math.min(100.0, (currentLogs * 100.0) / MAX_STANDALONE_LOGS);
+        String statusText;
+        String hintMessage;
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+        if (clusterActive) {
+            statusText = "CLUSTER_ACTIVE";
+            hintMessage = "🟢 CỤM 2 SERVER ĐANG ĐỒNG BỘ: Dữ liệu đã sao lưu 100% vào ServerBackup (logs_backup.db). Giới hạn 2.000 log đã được dỡ bỏ!";
+        } else if (isOverloaded || currentLogs >= MAX_STANDALONE_LOGS) {
+            statusText = "OVERLOADED";
+            hintMessage = "🛑 SERVER 1 QUÁ TẢI (ĐÃ ĐẠT 2.000 LOG) - Đã ngắt mạch bảo vệ (Circuit Breaker). Đang đợi Server 2 được mở...";
+        } else if (percent >= 85.0) {
+            statusText = "CRITICAL_CAPACITY";
+            hintMessage = String.format("⚡ SẮP VƯỢT NGƯỠNG 2.000 LOG (%.1f%%)! Vui lòng khởi động Server 2 (ServerBackupMain) để mở rộng dung lượng và tránh nghẽn!", percent);
+        } else if (percent >= 60.0) {
+            statusText = "HIGH_LOAD";
+            hintMessage = String.format("⚠️ Lưu lượng log đang tăng cao (%.1f%%). Chuẩn bị sẵn sàng Server 2 để phân tải khi cần.", percent);
+        } else {
+            statusText = "STANDALONE_OK";
+            hintMessage = "💡 Hệ thống đang chạy ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.";
+        }
+
+        String json = String.format(
+            "{\"type\":\"CLUSTER_STATUS\",\"currentLogs\":%d,\"limit\":%d,\"percent\":%.1f,\"clusterActive\":%b,\"overloaded\":%b,\"secondarySynced\":%d,\"status\":\"%s\",\"message\":\"%s\",\"timestamp\":\"%s\"}",
+            currentLogs, MAX_STANDALONE_LOGS, percent, clusterActive, isOverloaded, ClusterSyncCoordinator.getSecondarySyncedCount(), statusText, escapeJson(hintMessage), timestamp
+        );
+        globalWsServer.broadcast(json);
+    }
+
+    public static void printProgressBadge(int currentLogs, int limit, boolean overloaded, boolean clusterActive) {
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        int barLength = 20;
+        int fill = Math.min(barLength, (currentLogs * barLength) / limit);
+        String bar = "█".repeat(Math.max(0, fill)) + "░".repeat(Math.max(0, barLength - fill));
+        double percent = Math.min(100.0, (currentLogs * 100.0) / limit);
+
+        if (clusterActive) {
+            System.out.printf("[%s] [CỤM 2 SERVER] [%s] %,d log | ĐỒNG BỘ 100%% | 🟢 MỞ RỘNG VƯỢT NGƯỠNG AN TOÀN%n", timestamp, bar, currentLogs);
+            System.out.println("   >>> [THÔNG BÁO] Cụm 2 Server đang bảo vệ lẫn nhau. Không giới hạn dung lượng!\n");
+        } else if (overloaded || currentLogs >= limit) {
+            System.err.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (100.0%%) | 🛑 QUÁ TẢI (CIRCUIT BREAKER)%n", timestamp, bar, currentLogs, limit);
+            System.err.println("   >>> [THÔNG BÁO] Tạm dừng nạp log để bảo vệ hệ thống. Đang đợi Server 2 được mở...\n");
+        } else if (percent >= 85.0) {
+            System.out.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (%.1f%%) | ⚡ SẮP VƯỢT NGƯỠNG%n", timestamp, bar, currentLogs, limit, percent);
+            System.out.printf("   >>> [THÔNG BÁO] Lượng log sắp chạm 2.000 (%.1f%%)! Hãy mở Server 2 (ServerBackupMain) ngay!%n%n", percent);
+        } else if (percent >= 60.0) {
+            System.out.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (%.1f%%) | ⚠️ TẢI CAO%n", timestamp, bar, currentLogs, limit, percent);
+            System.out.printf("   >>> [THÔNG BÁO] Lưu lượng tăng cao (%.1f%%). Chuẩn bị sẵn sàng Server 2!%n%n", percent);
+        } else {
+            System.out.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (%.1f%%) | ✅ AN TOÀN (STANDALONE)%n", timestamp, bar, currentLogs, limit, percent);
+            System.out.println("   >>> [THÔNG BÁO] Hệ thống chạy ổn định. Giới hạn tối đa: 2.000 log.\n");
+        }
     }
 }

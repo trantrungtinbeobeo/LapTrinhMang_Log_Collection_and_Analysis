@@ -16,16 +16,23 @@ final class DesktopStatistics {
             return (level.equals("Tất cả") || level.equals(log.event().getSeverityLevel())) && log.matches(query);
         }
     }
+    record ClusterState(boolean active, boolean overloaded, int limit, double percent, String status, String message, int secondarySynced, String timestamp) {
+        static ClusterState standalone() {
+            return new ClusterState(false, false, 2000, 0.0, "STANDALONE_OK", "💡 Hệ thống đang chạy ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.", 0, "");
+        }
+    }
     record Snapshot(long total, Map<String, Long> severity, int ipCount, int retained,
                     List<Ip> ips, List<Group> groups, List<DesktopLog> logs, List<DesktopLog> allLogs, List<Alert> alerts,
                     List<Rate> rates, Long current, double average, long peak, double axisMax,
-                    long startedAt, boolean everDisconnected, List<BlockedIp> blockedIps) {}
+                    long startedAt, boolean everDisconnected, List<BlockedIp> blockedIps,
+                    ClusterState cluster) {}
     private static final class Bucket { long count; boolean available; Bucket(boolean value) { available = value; } }
     private final ArrayDeque<DesktopLog> logs = new ArrayDeque<>();
     private final ArrayDeque<Alert> alerts = new ArrayDeque<>();
     private final Map<String, BlockedIp> blockedIps = new LinkedHashMap<>();
     private final Map<String, Long> severity = new TreeMap<>();
     private final NavigableMap<Long, Bucket> rates = new TreeMap<>();
+    private ClusterState cluster = ClusterState.standalone();
     private final long startedAt;
     private long total, lastSecond;
     private boolean connected, connectedBefore, everDisconnected;
@@ -78,6 +85,12 @@ final class DesktopStatistics {
     }
     synchronized void unblockAll() {
         blockedIps.clear();
+    }
+    synchronized void updateCluster(ClusterState state) {
+        if (state != null) this.cluster = state;
+    }
+    synchronized ClusterState cluster() {
+        return cluster;
     }
     synchronized boolean isBlocked(String ip) {
         return ip != null && blockedIps.containsKey(ip.trim());
@@ -136,6 +149,6 @@ final class DesktopStatistics {
         return new Snapshot(total, Map.copyOf(severity), ips.size(), logs.size(), ips, List.copyOf(groups),
                 List.copyOf(visible), List.copyOf(all), List.copyOf(alerts), List.copyOf(samples), current,
                 seconds == 0 ? 0 : (double) sum / seconds, peak, max, startedAt, everDisconnected,
-                List.copyOf(blockedIps.values()));
+                List.copyOf(blockedIps.values()), cluster);
     }
 }
