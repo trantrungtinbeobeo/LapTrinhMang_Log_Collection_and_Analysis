@@ -6,6 +6,8 @@ import com.Logcollector.server.Core.LogQueue;
 import com.Logcollector.server.Parser.LogEvent;
 import com.Logcollector.server.Parser.LogParser;
 import com.Logcollector.server.RealTime.WebSocketServer;
+import com.Logcollector.server.ServerBackup.ClusterProtocol;
+import com.Logcollector.server.ServerBackup.ClusterSyncCoordinator;
 import com.Logcollector.server.Storage.DatabaseManager;
 import com.Logcollector.server.UI.ChartManager;
 import com.Logcollector.server.UI.DashboardUI;
@@ -20,6 +22,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ServerMain {
+    public static final int MAX_STANDALONE_LOGS = 2000;
+    public static final int SYNC_PORT = ClusterProtocol.DEFAULT_SYNC_PORT;
+    public static volatile boolean isOverloaded = false;
+
     private static final int UDP_PORT = 514;
     private static final int TCP_PORT = 9999;
     private static final int WS_PORT = 8085;
@@ -110,6 +116,12 @@ public class ServerMain {
             globalWsServer = wsServer;
             wsServer.start();
 
+            // Khoi dong Bo dieu phoi dong bo Cum (Cluster Coordinator) lang nghe Server 2 ket noi
+            ClusterSyncCoordinator.start(SYNC_PORT, wsServer, () -> {
+                isOverloaded = false;
+                System.out.println("\n[SERVER 1] DA KET NOI VOI SERVER 2! GIOI HAN 2.000 LOG DUOC GO BO HOAN TOAN.\n");
+            });
+
             // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va Bo tong hop bieu do (ChartManager)
             ChartManager chartManager = new ChartManager();
             AnomalyDetector detector = new AnomalyDetector();
@@ -146,6 +158,32 @@ public class ServerMain {
                         long now = System.currentTimeMillis();
 
                         if (rawLog != null) {
+                            // Kiem tra nguong 2.000 log khi chay may chu don le (Chua bat Server 2)
+                            if (logIndex >= MAX_STANDALONE_LOGS && !ClusterSyncCoordinator.isSecondaryConnected()) {
+                                if (!isOverloaded) {
+                                    isOverloaded = true;
+                                    System.err.println("\n=================================================================");
+                                    System.err.println("  [CANH BAO QUA TAI] SERVER 1 DA DAT NGUONG TOI DA 2.000 LOG!   ");
+                                    System.err.println("  SERVER DANG O CHE DO STANDALONE (SERVER 2 CHUA BAT).          ");
+                                    System.err.println("  KICH HOAT CAT MACH BAO VE (CIRCUIT BREAKER) - TAM DUNG NAP!  ");
+                                    System.err.println("  ==> VUI LONG KHOI DONG ServerBackupMain DE TIEP TUC SCALE-OUT!");
+                                    System.err.println("=================================================================\n");
+
+                                    if (globalWsServer != null) {
+                                        String overloadJson = String.format(
+                                            "{\"type\":\"SYSTEM_ALERT\",\"status\":\"OVERLOADED\",\"currentLogs\":%d,\"limit\":%d,\"message\":\"⚠️ SERVER 1 QUÁ TẢI (ĐÃ ĐẠT 2.000 LOG) - CẦN BẬT SERVER 2 ĐỂ MỞ RỘNG!\"}",
+                                            logIndex, MAX_STANDALONE_LOGS
+                                        );
+                                        globalWsServer.broadcast(overloadJson);
+                                    }
+                                }
+                                continue;
+                            }
+
+                            if (isOverloaded && ClusterSyncCoordinator.isSecondaryConnected()) {
+                                isOverloaded = false;
+                            }
+
                             logIndex++;
 
                             // Boc tach va chuan hoa log
@@ -192,6 +230,9 @@ public class ServerMain {
 
                                 // Dua log hop le vao lo cho ghi xuong CSDL
                                 dbBatch.add(event);
+
+                                // Replicate ban sao log sang Server 2 theo thoi gian thuc neu Server 2 dang online
+                                ClusterSyncCoordinator.replicateLog(event);
                             }
                         }
 
@@ -238,6 +279,7 @@ public class ServerMain {
             // Shutdown hook de don dep tai nguyen khi dung chuong trinh
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("\n[SHUTDOWN] Dang dung cac tien trinh Server...");
+                ClusterSyncCoordinator.stop();
                 engine.stop();
                 wsServer.stop();
                 dashboardUI.stop();
