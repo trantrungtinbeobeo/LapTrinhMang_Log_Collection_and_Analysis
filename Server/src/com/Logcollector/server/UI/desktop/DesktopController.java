@@ -116,12 +116,15 @@ final class DesktopController implements AutoCloseable {
             String raw = DesktopJson.string(data, "raw");
             if (!raw.isBlank()) { LogEvent parsed = LogParser.parse(raw); if (parsed != null) log.setFacility(parsed.getFacility()); }
             target.stats.add(DesktopLog.of(log, input.receivedAt, "SERVER", raw));
-        } else if (Set.of("ALERT", "IP_BLOCKED", "IP_UNBLOCKED", "ALL_IPS_UNBLOCKED").contains(type)) {
-            String name = type.equals("ALERT") ? DesktopJson.string(data, "alertType") : type;
+        } else if (Set.of("ALERT", "IP_BLOCKED", "IP_UNBLOCKED", "ALL_IPS_UNBLOCKED", "SYSTEM_ALERT").contains(type)) {
+            String name = type.equals("ALERT") ? DesktopJson.string(data, "alertType") :
+                          type.equals("SYSTEM_ALERT") ? ("CLUSTER: " + DesktopJson.string(data, "status")) : type;
             String message = DesktopJson.string(data, "message");
             if (message.isEmpty()) message = DesktopJson.string(data, "reason");
             String ip = DesktopJson.string(data, "ip");
+            if (ip.isEmpty()) ip = type.equals("SYSTEM_ALERT") ? "CLUSTER" : "";
             String timestamp = DesktopJson.string(data, "timestamp");
+            if (timestamp.isEmpty()) timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             if ("IP_BLOCKED".equals(type)) {
                 target.stats.blockIp(ip, message, timestamp);
             } else if ("ALL_IPS_UNBLOCKED".equals(type)) {
