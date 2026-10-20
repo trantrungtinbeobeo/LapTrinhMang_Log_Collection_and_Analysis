@@ -36,6 +36,20 @@ public class ServerMain {
     public static final java.util.Set<String> BLOCKED_IPS = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private static WebSocketServer globalWsServer;
     private static AnomalyDetector globalDetector;
+    private static final java.util.Queue<String> pendingOverflowLogs = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    public static void flushPendingOverflowLogs() {
+        int count = pendingOverflowLogs.size();
+        if (count > 0) {
+            System.out.println("\n[CLUSTER EXPANDED] Server 2 da ket noi! Giai phong " + count + " log dang cho trong bo dem de luu he thong va dong bo...");
+            while (!pendingOverflowLogs.isEmpty()) {
+                String log = pendingOverflowLogs.poll();
+                if (log != null) {
+                    LogQueue.offer(log);
+                }
+            }
+        }
+    }
 
     public static int blockIp(String ip, String reason) {
         if (ip == null || ip.trim().isEmpty() || "127.0.0.1".equals(ip.trim())) return 0;
@@ -121,6 +135,7 @@ public class ServerMain {
             ClusterSyncCoordinator.start(SYNC_PORT, wsServer, () -> {
                 isOverloaded = false;
                 System.out.println("\n[SERVER 1] DA KET NOI VOI SERVER 2! GIOI HAN 2.000 LOG DUOC GO BO HOAN TOAN.\n");
+                flushPendingOverflowLogs();
                 broadcastClusterStatus(currentLogCount);
             });
 
@@ -179,13 +194,13 @@ public class ServerMain {
                                     System.err.println("\n=================================================================");
                                     System.err.println("  [CANH BAO QUA TAI] SERVER 1 DA DAT NGUONG TOI DA 2.000 LOG!   ");
                                     System.err.println("  SERVER DANG O CHE DO STANDALONE (SERVER 2 CHUA BAT).          ");
-                                    System.err.println("  KICH HOAT CAT MACH BAO VE (CIRCUIT BREAKER) - TAM DUNG NAP!  ");
-                                    System.err.println("  ==> VUI LONG KHOI DONG ServerBackupMain DE TIEP TUC SCALE-OUT!");
+                                    System.err.println("  DANG LUU DEM CHO SERVER 2 KHOI DONG DE KHONG BI MAT DU LIEU!   ");
+                                    System.err.println("  ==> VUI LONG KHOI DONG ServerBackupMain DE MO RONG HE THONG!   ");
                                     System.err.println("=================================================================\n");
 
                                     if (globalWsServer != null) {
                                         String overloadJson = String.format(
-                                            "{\"type\":\"SYSTEM_ALERT\",\"status\":\"OVERLOADED\",\"currentLogs\":%d,\"limit\":%d,\"message\":\"⚠️ SERVER 1 QUÁ TẢI (ĐÃ ĐẠT 2.000 LOG) - CẦN BẬT SERVER 2 ĐỂ MỞ RỘNG!\"}",
+                                            "{\"type\":\"SYSTEM_ALERT\",\"status\":\"OVERLOADED\",\"currentLogs\":%d,\"limit\":%d,\"message\":\"⚠️ SERVER 1 ĐẠT NGƯỠNG 2.000 LOG - ĐANG LƯU ĐỆM CHỜ BẬT SERVER 2!\"}",
                                             logIndex, MAX_STANDALONE_LOGS
                                         );
                                         globalWsServer.broadcast(overloadJson);
@@ -193,11 +208,16 @@ public class ServerMain {
                                     }
                                     printProgressBadge(logIndex, MAX_STANDALONE_LOGS, true, false);
                                 }
+                                // Luu dem an toan cho Server 2 khoi dong de tranh mat log cua Client dang gui
+                                if (pendingOverflowLogs.size() < 20000) {
+                                    pendingOverflowLogs.offer(rawLog);
+                                }
                                 continue;
                             }
 
                             if (isOverloaded && ClusterSyncCoordinator.isSecondaryConnected()) {
                                 isOverloaded = false;
+                                flushPendingOverflowLogs();
                             }
 
                             logIndex++;

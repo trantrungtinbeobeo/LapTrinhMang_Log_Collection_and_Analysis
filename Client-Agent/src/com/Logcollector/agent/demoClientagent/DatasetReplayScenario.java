@@ -75,14 +75,18 @@ public class DatasetReplayScenario {
         }
 
         AgentLocalQueue queue = new AgentLocalQueue();
-        String now = Instant.now().toString();
+        long baseTime = System.currentTimeMillis() - (attackLines.size() * 1000L);
 
         for (int i = 0; i < attackLines.size(); i++) {
             String rawLine = attackLines.get(i);
             // Phan cap leo thang: 2 lan dau INFO, lan 3-4 WARNING, tu lan 5 CRITICAL
             String severity = (i >= 4) ? "CRITICAL" : (i >= 2 ? "WARNING" : "INFO");
+            String logTime = java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(baseTime + (i * 1000L)),
+                    java.time.ZoneId.systemDefault()
+            ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             queue.enqueue(new EventGenerator.LogEvent(
-                    now,
+                    logTime,
                     severity,
                     "LOGIN_FAILED",
                     rawLine
@@ -136,7 +140,7 @@ public class DatasetReplayScenario {
 
         SyslogFormatter formatter = new SyslogFormatter();
         AgentLocalQueue queue = new AgentLocalQueue();
-        String now = Instant.now().toString();
+        long baseTime = System.currentTimeMillis() - (rawLogs.size() * 150L);
 
         for (int i = 0; i < rawLogs.size(); i++) {
             String raw = rawLogs.get(i);
@@ -150,10 +154,15 @@ public class DatasetReplayScenario {
                 severity = "INFO";
             }
 
+            String logTime = java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(baseTime + (i * 150L)),
+                    java.time.ZoneId.systemDefault()
+            ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
             String nodeIp = "192.168.1." + ((i % 150) + 10);
             String nodeDevice = "Cluster-Node-" + ((i % 16) + 1);
             queue.enqueue(new EventGenerator.LogEvent(
-                    now,
+                    logTime,
                     severity,
                     "SSH_TRAFFIC",
                     "Cluster node '" + nodeDevice + "' processed traffic: " + raw + " | SourceIP: " + nodeIp,
@@ -223,9 +232,25 @@ public class DatasetReplayScenario {
     }
 
     private static File locateDatasetFile() {
+        // 1. Thu tim qua ClassLoader Resource (khi de file trong package / Source Packages cua NetBeans)
+        try {
+            java.net.URL res = DatasetReplayScenario.class.getResource("dataset/OpenSSH_2k.log");
+            if (res == null) res = DatasetReplayScenario.class.getResource("OpenSSH_2k.log");
+            if (res == null) res = DatasetReplayScenario.class.getClassLoader().getResource("OpenSSH_2k.log");
+            if (res != null && "file".equalsIgnoreCase(res.getProtocol())) {
+                File f = new File(res.toURI());
+                if (f.exists() && f.isFile()) return f;
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Thu cac duong dan tuong doi pho bien
         String[] possiblePaths = {
                 "dataset/OpenSSH_2k.log",
                 "../dataset/OpenSSH_2k.log",
+                "src/dataset/OpenSSH_2k.log",
+                "src/bai07_bt04/agent/demoClientagent/dataset/OpenSSH_2k.log",
+                "src/com/Logcollector/agent/demoClientagent/dataset/OpenSSH_2k.log",
+                "build/classes/bai07_bt04/agent/demoClientagent/dataset/OpenSSH_2k.log",
                 "LapTrinhMang_Log_Collection_and_Analysis/dataset/OpenSSH_2k.log",
                 "c:/Users/TinKoBeo/Downloads/logcollection/LapTrinhMang_Log_Collection_and_Analysis/dataset/OpenSSH_2k.log",
                 "c:/Users/TinKoBeo/Downloads/logcollection/OpenSSH_2k.log"
@@ -234,6 +259,37 @@ public class DatasetReplayScenario {
             File f = new File(p);
             if (f.exists() && f.isFile()) {
                 return f;
+            }
+        }
+
+        // 3. Quet de quy tu dong trong thu muc project (user.dir) va thu muc cha
+        try {
+            File curDir = new File(System.getProperty("user.dir", "."));
+            File found = findFileRecursively(curDir, "OpenSSH_2k.log", 6);
+            if (found != null) return found;
+
+            if (curDir.getParentFile() != null) {
+                found = findFileRecursively(curDir.getParentFile(), "OpenSSH_2k.log", 5);
+                if (found != null) return found;
+            }
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private static File findFileRecursively(File dir, String filename, int maxDepth) {
+        if (dir == null || !dir.isDirectory() || maxDepth <= 0) return null;
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            if (f.isFile() && f.getName().equalsIgnoreCase(filename)) {
+                return f;
+            }
+        }
+        for (File f : files) {
+            if (f.isDirectory() && !f.getName().startsWith(".") && !f.getName().equals(".git")) {
+                File found = findFileRecursively(f, filename, maxDepth - 1);
+                if (found != null) return found;
             }
         }
         return null;

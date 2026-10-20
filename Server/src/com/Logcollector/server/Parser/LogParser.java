@@ -1,5 +1,7 @@
 package com.Logcollector.server.Parser;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,9 +43,7 @@ public class LogParser {
 
             // Chuan hoa thoi gian (Timestamp)
             String rawTimestamp = matcher.group(2);
-            String timestamp = (rawTimestamp != null && !rawTimestamp.isEmpty()) 
-                                ? rawTimestamp.trim() 
-                                : LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String timestamp = formatHumanReadableTimestamp(rawTimestamp);
 
             // Chuan hoa IP, thiet bi va noi dung
             String token = matcher.group(3).trim();
@@ -204,6 +204,26 @@ public class LogParser {
             }
         }
         return (fallback != null && !fallback.trim().isEmpty()) ? fallback : "Network-Device";
+    }
+
+    /**
+     * Chuan hoa timestamp tu moi dinh dang (ISO 8601, RFC 5424) ve dang de doc: yyyy-MM-dd HH:mm:ss
+     */
+    public static String formatHumanReadableTimestamp(String rawTs) {
+        if (rawTs == null || rawTs.trim().isEmpty()) {
+            return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        }
+        String clean = rawTs.trim();
+        try {
+            if (clean.contains("T")) {
+                Instant inst = Instant.parse(clean);
+                return LocalDateTime.ofInstant(inst, ZoneId.systemDefault())
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            } else if (clean.matches("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$")) {
+                return clean;
+            }
+        } catch (Exception ignored) {}
+        return clean;
     }
 
     /**
