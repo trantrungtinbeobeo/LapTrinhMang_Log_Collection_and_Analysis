@@ -17,7 +17,7 @@ import java.util.List;
  */
 public class CyberAttackScenario {
 
-    private static final String HOST = System.getProperty("server.host", "127.0.0.1");
+    private static final String HOST = System.getProperty("server.host", "192.168.100.71");
     private static final int TCP_PORT = 9999;
 
     public static void main(String[] args) {
