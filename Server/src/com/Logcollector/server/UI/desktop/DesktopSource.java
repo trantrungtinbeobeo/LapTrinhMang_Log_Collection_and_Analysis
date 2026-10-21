@@ -10,6 +10,7 @@ import java.util.function.*;
 interface DesktopSource extends AutoCloseable {
     void start();
     void close();
+    default boolean send(String text) { return false; }
 
     final class Demo implements DesktopSource {
         private final BiConsumer<Boolean, String> status;
@@ -67,6 +68,19 @@ interface DesktopSource extends AutoCloseable {
                 catch (RejectedExecutionException ignored) { }
             }
         }
+        public boolean send(String text) {
+            WebSocket ws = socket;
+            if (ws != null && !closed) {
+                try {
+                    ws.sendText(text, true);
+                    return true;
+                } catch (Exception e) {
+                    System.err.println("[Desktop WebSocket] Loi gui goi tin: " + e.getMessage());
+                }
+            }
+            return false;
+        }
+
         public void close() {
             closed = true;
             if (pending != null) pending.cancel(true);

@@ -6,16 +6,27 @@ import com.Logcollector.server.Core.LogQueue;
 import com.Logcollector.server.Parser.LogEvent;
 import com.Logcollector.server.Parser.LogParser;
 import com.Logcollector.server.RealTime.WebSocketServer;
+import com.Logcollector.server.ServerBackup.ClusterProtocol;
+import com.Logcollector.server.ServerBackup.ClusterSyncCoordinator;
+import com.Logcollector.server.Storage.DatabaseManager;
 import com.Logcollector.server.UI.ChartManager;
 import com.Logcollector.server.UI.DashboardUI;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ServerMain {
+    public static final int MAX_STANDALONE_LOGS = 2000;
+    public static final int SYNC_PORT = ClusterProtocol.DEFAULT_SYNC_PORT;
+    public static volatile boolean isOverloaded = false;
+    public static volatile int currentLogCount = 0;
+
     private static final int UDP_PORT = 514;
     private static final int TCP_PORT = 9999;
     private static final int WS_PORT = 8085;
@@ -24,6 +35,21 @@ public class ServerMain {
 
     public static final java.util.Set<String> BLOCKED_IPS = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private static WebSocketServer globalWsServer;
+    private static AnomalyDetector globalDetector;
+    private static final java.util.Queue<String> pendingOverflowLogs = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    public static void flushPendingOverflowLogs() {
+        int count = pendingOverflowLogs.size();
+        if (count > 0) {
+            System.out.println("\n[CLUSTER EXPANDED] Server 2 da ket noi! Giai phong " + count + " log dang cho trong bo dem de luu he thong va dong bo...");
+            while (!pendingOverflowLogs.isEmpty()) {
+                String log = pendingOverflowLogs.poll();
+                if (log != null) {
+                    LogQueue.offer(log);
+                }
+            }
+        }
+    }
 
     public static int blockIp(String ip, String reason) {
         if (ip == null || ip.trim().isEmpty() || "127.0.0.1".equals(ip.trim())) return 0;
@@ -49,10 +75,14 @@ public class ServerMain {
         String cleanIp = ip.trim();
         boolean removed = BLOCKED_IPS.remove(cleanIp);
         if (removed) {
+            if (globalDetector != null) {
+                globalDetector.resetIp(cleanIp);
+            }
             System.out.println("\n[FIREWALL UNBLOCK] DA MO KHOA / BO CHAN IP: " + cleanIp);
             if (globalWsServer != null) {
                 String unblockJson = String.format(
-                    "{\"type\":\"IP_UNBLOCKED\",\"ip\":\"%s\",\"timestamp\":\"%s\"}",
+                    "{\"type\":\"IP_UNBLOCKED\",\"ip\":\"%s\",\"message\":\"Da mo khoa / bo chan IP %s\",\"timestamp\":\"%s\"}",
+                    escapeJson(cleanIp),
                     escapeJson(cleanIp),
                     Instant.now().toString()
                 );
@@ -65,10 +95,14 @@ public class ServerMain {
     public static int unblockAllIps() {
         int count = BLOCKED_IPS.size();
         BLOCKED_IPS.clear();
+        if (globalDetector != null) {
+            globalDetector.resetAll();
+        }
         System.out.println("\n[FIREWALL UNBLOCK ALL] DA GO TOAN BO " + count + " IP KHOI BLACKLIST!");
         if (globalWsServer != null) {
             String unblockAllJson = String.format(
-                "{\"type\":\"ALL_IPS_UNBLOCKED\",\"count\":%d,\"timestamp\":\"%s\"}",
+                "{\"type\":\"ALL_IPS_UNBLOCKED\",\"count\":%d,\"ip\":\"ALL\",\"message\":\"Da go toan bo %d IP khoi Blacklist\",\"timestamp\":\"%s\"}",
+                count,
                 count,
                 Instant.now().toString()
             );
@@ -83,6 +117,10 @@ public class ServerMain {
         System.out.println("==================================================");
 
         try {
+            // 0. Khoi tao co so du lieu SQLite (system_logs)
+            System.out.println("[DATABASE] Khoi tao co so du lieu SQLite (system_logs)...");
+            DatabaseManager.initializeDatabase();
+
             // 1. Khoi dong Web Server HTTP (cong 8080) phuc vu Dashboard va WebSocket Server (cong 8085)
             System.out.println("[UI] Dang khoi dong Web Server Dashboard tai cong " + HTTP_PORT + "...");
             DashboardUI dashboardUI = new DashboardUI(HTTP_PORT);
@@ -93,9 +131,18 @@ public class ServerMain {
             globalWsServer = wsServer;
             wsServer.start();
 
+            // Khoi dong Bo dieu phoi dong bo Cum (Cluster Coordinator) lang nghe Server 2 ket noi
+            ClusterSyncCoordinator.start(SYNC_PORT, wsServer, () -> {
+                isOverloaded = false;
+                System.out.println("\n[SERVER 1] DA KET NOI VOI SERVER 2! GIOI HAN 2.000 LOG DUOC GO BO HOAN TOAN.\n");
+                flushPendingOverflowLogs();
+                broadcastClusterStatus(currentLogCount);
+            });
+
             // 2. Khoi tao Bo phat hien bat thuong (AnomalyDetector) va Bo tong hop bieu do (ChartManager)
             ChartManager chartManager = new ChartManager();
             AnomalyDetector detector = new AnomalyDetector();
+            globalDetector = detector;
             detector.setAlertListener((alertType, sourceIp, alertMessage) -> {
                 System.err.println("\n[CANH BAO AN NINH] [" + alertType + "] IP: " + sourceIp + " -> " + alertMessage);
                 String alertJson = String.format(
@@ -116,52 +163,115 @@ public class ServerMain {
             // 3. Luong tieu thu log tu LogQueue, boc tach qua LogParser, thong ke va phan tich
             ExecutorService consumer = Executors.newSingleThreadExecutor();
             consumer.submit(() -> {
-                System.out.println("[PIPELINE] San sang lay log tu Queue, boc tach va phat tan...");
+                System.out.println("[PIPELINE] San sang lay log tu Queue, boc tach, luu CSDL va phat tan...");
                 int logIndex = 0;
+                List<LogEvent> dbBatch = new ArrayList<>();
+                long lastDbFlushTime = System.currentTimeMillis();
 
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
-                        String rawLog = LogQueue.take();
-                        logIndex++;
+                        // Cho toi da 200ms de lay log; neu khong co log thi kiem tra moc thoi gian 1 giay de flush DB
+                        String rawLog = LogQueue.poll(200, TimeUnit.MILLISECONDS);
+                        long now = System.currentTimeMillis();
 
-                        // Boc tach va chuan hoa log
-                        LogEvent event = LogParser.parse(rawLog);
+                        if (rawLog != null) {
+                            // 1. Boc tach va chuan hoa log truoc
+                            LogEvent event = LogParser.parse(rawLog);
+                            if (event == null) continue;
 
-                        if (event != null) {
                             String effectiveIp = extractEffectiveIp(rawLog, event.getIp());
 
-                            // Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
+                            // 2. Kiem tra Firewall Blacklist: Neu IP da bi chan thi DROP ngay lap tuc
                             if (BLOCKED_IPS.contains(effectiveIp)) {
                                 System.out.println("[FIREWALL DROP] Tu choi goi tin tu IP da bi khoa: " + effectiveIp);
                                 continue;
                             }
 
+                            // 3. Kiem tra nguong 2.000 log hop le khi chay may chu don le (Chua bat Server 2)
+                            if (logIndex >= MAX_STANDALONE_LOGS && !ClusterSyncCoordinator.isSecondaryConnected()) {
+                                if (!isOverloaded) {
+                                    isOverloaded = true;
+                                    System.err.println("\n=================================================================");
+                                    System.err.println("  [CANH BAO QUA TAI] SERVER 1 DA DAT NGUONG TOI DA 2.000 LOG!   ");
+                                    System.err.println("  SERVER DANG O CHE DO STANDALONE (SERVER 2 CHUA BAT).          ");
+                                    System.err.println("  DANG LUU DEM CHO SERVER 2 KHOI DONG DE KHONG BI MAT DU LIEU!   ");
+                                    System.err.println("  ==> VUI LONG KHOI DONG ServerBackupMain DE MO RONG HE THONG!   ");
+                                    System.err.println("=================================================================\n");
+
+                                    if (globalWsServer != null) {
+                                        String overloadJson = String.format(
+                                            "{\"type\":\"SYSTEM_ALERT\",\"status\":\"OVERLOADED\",\"currentLogs\":%d,\"limit\":%d,\"message\":\"⚠️ SERVER 1 ĐẠT NGƯỠNG 2.000 LOG - ĐANG LƯU ĐỆM CHỜ BẬT SERVER 2!\"}",
+                                            logIndex, MAX_STANDALONE_LOGS
+                                        );
+                                        globalWsServer.broadcast(overloadJson);
+                                        broadcastClusterStatus(logIndex);
+                                    }
+                                    printProgressBadge(logIndex, MAX_STANDALONE_LOGS, true, false);
+                                }
+                                // Luu dem an toan cho Server 2 khoi dong de tranh mat log cua Client dang gui
+                                if (pendingOverflowLogs.size() < 20000) {
+                                    pendingOverflowLogs.offer(rawLog);
+                                }
+                                continue;
+                            }
+
+                            if (isOverloaded && ClusterSyncCoordinator.isSecondaryConnected()) {
+                                isOverloaded = false;
+                                flushPendingOverflowLogs();
+                            }
+
+                            logIndex++;
+                            currentLogCount = logIndex;
+
+                            if (logIndex % 25 == 0 || logIndex == 1200 || logIndex == 1700 || logIndex >= MAX_STANDALONE_LOGS) {
+                                printProgressBadge(logIndex, MAX_STANDALONE_LOGS, isOverloaded, ClusterSyncCoordinator.isSecondaryConnected());
+                            }
+                            broadcastClusterStatus(logIndex);
+
+                            // Dong bo IP hieu dung vao doi tuong LogEvent truoc khi luu CSDL
+                            event.setIp(effectiveIp);
+
                             // Ghi nhan vao ChartManager phuc vu thong ke bieu do thoi gian thuc
                             chartManager.recordLog(event.getSeverityLevel(), effectiveIp);
 
-                            System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
-                            System.out.println("   -> [PARSED] IP: " + effectiveIp
-                                    + " | Thiet bi: " + event.getDevice()
-                                    + " | Phan loai: [" + event.getCategory() + "]"
-                                    + " | Level: " + event.getSeverityLevel()
-                                    + " | Noi dung: " + event.getMessage());
+                                System.out.println("\n[SERVER NHAN LOG #" + logIndex + "]: " + rawLog);
+                                System.out.println("   -> [PARSED] IP: " + effectiveIp
+                                        + " | Thiet bi: " + event.getDevice()
+                                        + " | Phan loai: [" + event.getCategory() + "]"
+                                        + " | Level: " + event.getSeverityLevel()
+                                        + " | Noi dung: " + event.getMessage());
 
-                            // Kiem tra dau hieu bat thuong (Brute-force login / Port scan)
-                            checkAnomaly(detector, event, rawLog, effectiveIp);
+                                // Kiem tra dau hieu bat thuong (Brute-force login / Port scan)
+                                checkAnomaly(detector, event, rawLog, effectiveIp);
 
-                            // Phat tan log dang JSON qua WebSocket toi Dashboard
-                            String logJson = String.format(
-                                "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"device\":\"%s\",\"category\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
-                                logIndex,
-                                escapeJson(effectiveIp),
-                                escapeJson(event.getDevice()),
-                                escapeJson(event.getCategory()),
-                                escapeJson(event.getTimestamp()),
-                                escapeJson(event.getSeverityLevel()),
-                                escapeJson(event.getMessage()),
-                                escapeJson(rawLog)
-                            );
-                            wsServer.broadcast(logJson);
+                                // Phat tan log dang JSON qua WebSocket toi Dashboard
+                                String logJson = String.format(
+                                    "{\"type\":\"LOG\",\"index\":%d,\"ip\":\"%s\",\"device\":\"%s\",\"category\":\"%s\",\"timestamp\":\"%s\",\"level\":\"%s\",\"message\":\"%s\",\"raw\":\"%s\"}",
+                                    logIndex,
+                                    escapeJson(effectiveIp),
+                                    escapeJson(event.getDevice()),
+                                    escapeJson(event.getCategory()),
+                                    escapeJson(event.getTimestamp()),
+                                    escapeJson(event.getSeverityLevel()),
+                                    escapeJson(event.getMessage()),
+                                    escapeJson(rawLog)
+                                );
+                                wsServer.broadcast(logJson);
+
+                                // Dua log hop le vao lo cho ghi xuong CSDL
+                                dbBatch.add(event);
+
+                                // Replicate ban sao log sang Server 2 theo thoi gian thuc neu Server 2 dang online
+                                ClusterSyncCoordinator.replicateLog(event);
+                        }
+
+                        // Kiem tra dieu kien ghi Batch Insert xuong CSDL SQLite:
+                        // 1. Gom du 50 log
+                        // 2. HOAC da troi qua it nhat 1 giay (1000ms) ke tu lan ghi truoc va dang co log cho
+                        if (dbBatch.size() >= 50 || (!dbBatch.isEmpty() && (now - lastDbFlushTime >= 1000))) {
+                            DatabaseManager.insertLogBatch(new ArrayList<>(dbBatch));
+                            dbBatch.clear();
+                            lastDbFlushTime = now;
                         }
 
                     } catch (InterruptedException e) {
@@ -170,6 +280,12 @@ public class ServerMain {
                     } catch (Exception e) {
                         System.err.println("[PIPELINE ERROR] " + e.getMessage());
                     }
+                }
+
+                // Ghi vet vet toan bo log con sot lai trong lo khi dung chuong trinh
+                if (!dbBatch.isEmpty()) {
+                    DatabaseManager.insertLogBatch(new ArrayList<>(dbBatch));
+                    dbBatch.clear();
                 }
             });
 
@@ -192,6 +308,7 @@ public class ServerMain {
             // Shutdown hook de don dep tai nguyen khi dung chuong trinh
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("\n[SHUTDOWN] Dang dung cac tien trinh Server...");
+                ClusterSyncCoordinator.stop();
                 engine.stop();
                 wsServer.stop();
                 dashboardUI.stop();
@@ -252,5 +369,62 @@ public class ServerMain {
             }
         }
         return sb.toString();
+    }
+
+    public static void broadcastClusterStatus(int currentLogs) {
+        if (globalWsServer == null) return;
+        boolean clusterActive = ClusterSyncCoordinator.isSecondaryConnected();
+        double percent = Math.min(100.0, (currentLogs * 100.0) / MAX_STANDALONE_LOGS);
+        String statusText;
+        String hintMessage;
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+        if (clusterActive) {
+            statusText = "CLUSTER_ACTIVE";
+            hintMessage = "🟢 CỤM 2 SERVER ĐANG ĐỒNG BỘ: Dữ liệu đã sao lưu 100% vào ServerBackup (logs_backup.db). Giới hạn 2.000 log đã được dỡ bỏ!";
+        } else if (isOverloaded || currentLogs >= MAX_STANDALONE_LOGS) {
+            statusText = "OVERLOADED";
+            hintMessage = "🛑 SERVER 1 QUÁ TẢI (ĐÃ ĐẠT 2.000 LOG) - Đã ngắt mạch bảo vệ (Circuit Breaker). Đang đợi Server 2 được mở...";
+        } else if (percent >= 85.0) {
+            statusText = "CRITICAL_CAPACITY";
+            hintMessage = String.format("⚡ SẮP VƯỢT NGƯỠNG 2.000 LOG (%.1f%%)! Vui lòng khởi động Server 2 (ServerBackupMain) để mở rộng dung lượng và tránh nghẽn!", percent);
+        } else if (percent >= 60.0) {
+            statusText = "HIGH_LOAD";
+            hintMessage = String.format("⚠️ Lưu lượng log đang tăng cao (%.1f%%). Chuẩn bị sẵn sàng Server 2 để phân tải khi cần.", percent);
+        } else {
+            statusText = "STANDALONE_OK";
+            hintMessage = "💡 Hệ thống đang chạy ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.";
+        }
+
+        String json = String.format(
+            "{\"type\":\"CLUSTER_STATUS\",\"currentLogs\":%d,\"limit\":%d,\"percent\":%.1f,\"clusterActive\":%b,\"overloaded\":%b,\"secondarySynced\":%d,\"status\":\"%s\",\"message\":\"%s\",\"timestamp\":\"%s\"}",
+            currentLogs, MAX_STANDALONE_LOGS, percent, clusterActive, isOverloaded, ClusterSyncCoordinator.getSecondarySyncedCount(), statusText, escapeJson(hintMessage), timestamp
+        );
+        globalWsServer.broadcast(json);
+    }
+
+    public static void printProgressBadge(int currentLogs, int limit, boolean overloaded, boolean clusterActive) {
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        int barLength = 20;
+        int fill = Math.min(barLength, (currentLogs * barLength) / limit);
+        String bar = "█".repeat(Math.max(0, fill)) + "░".repeat(Math.max(0, barLength - fill));
+        double percent = Math.min(100.0, (currentLogs * 100.0) / limit);
+
+        if (clusterActive) {
+            System.out.printf("[%s] [CỤM 2 SERVER] [%s] %,d log | ĐỒNG BỘ 100%% | 🟢 MỞ RỘNG VƯỢT NGƯỠNG AN TOÀN%n", timestamp, bar, currentLogs);
+            System.out.println("   >>> [THÔNG BÁO] Cụm 2 Server đang bảo vệ lẫn nhau. Không giới hạn dung lượng!\n");
+        } else if (overloaded || currentLogs >= limit) {
+            System.err.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (100.0%%) | 🛑 QUÁ TẢI (CIRCUIT BREAKER)%n", timestamp, bar, currentLogs, limit);
+            System.err.println("   >>> [THÔNG BÁO] Tạm dừng nạp log để bảo vệ hệ thống. Đang đợi Server 2 được mở...\n");
+        } else if (percent >= 85.0) {
+            System.out.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (%.1f%%) | ⚡ SẮP VƯỢT NGƯỠNG%n", timestamp, bar, currentLogs, limit, percent);
+            System.out.printf("   >>> [THÔNG BÁO] Lượng log sắp chạm 2.000 (%.1f%%)! Hãy mở Server 2 (ServerBackupMain) ngay!%n%n", percent);
+        } else if (percent >= 60.0) {
+            System.out.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (%.1f%%) | ⚠️ TẢI CAO%n", timestamp, bar, currentLogs, limit, percent);
+            System.out.printf("   >>> [THÔNG BÁO] Lưu lượng tăng cao (%.1f%%). Chuẩn bị sẵn sàng Server 2!%n%n", percent);
+        } else {
+            System.out.printf("[%s] [SERVER 1 TẢI] [%s] %,d/%,d (%.1f%%) | ✅ AN TOÀN (STANDALONE)%n", timestamp, bar, currentLogs, limit, percent);
+            System.out.println("   >>> [THÔNG BÁO] Hệ thống chạy ổn định. Giới hạn tối đa: 2.000 log.\n");
+        }
     }
 }

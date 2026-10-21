@@ -105,10 +105,13 @@ public class WebSocketServer {
                     isHandshakeComplete = true;
                     System.out.println("[WEBSOCKET] Client ket noi thanh cong: " + socket.getRemoteSocketAddress());
 
-                    // Đọc dữ liệu gửi từ client (nếu có ping/pong hoặc đóng kết nối)
-                    byte[] buffer = new byte[1024];
-                    while (isHandshakeComplete && in.read(buffer) != -1) {
-                        // Client vẫn đang giữ kết nối mở
+                    // Đọc và xử lý các frame dữ liệu gửi từ Client qua giao thức WebSocket (RFC 6455)
+                    while (isHandshakeComplete && !socket.isClosed()) {
+                        String text = readWebSocketFrame();
+                        if (text == null) break;
+                        if (!text.isEmpty()) {
+                            handleClientCommand(text);
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -116,6 +119,110 @@ public class WebSocketServer {
             } finally {
                 close();
             }
+        }
+
+        private void handleClientCommand(String text) {
+            try {
+                if (text.contains("\"action\":\"UNBLOCK_ALL\"") || text.contains("\"action\": \"UNBLOCK_ALL\"")) {
+                    System.out.println("[WEBSOCKET COMMAND] Nhan lenh UNBLOCK_ALL tu Client: " + socket.getRemoteSocketAddress());
+                    com.Logcollector.server.ServerMain.unblockAllIps();
+                } else if (text.contains("\"action\":\"UNBLOCK_IP\"") || text.contains("\"action\": \"UNBLOCK_IP\"")) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"ip\"\\s*:\\s*\"([^\"]+)\"").matcher(text);
+                    if (m.find()) {
+                        String ip = m.group(1).trim();
+                        System.out.println("[WEBSOCKET COMMAND] Nhan lenh UNBLOCK_IP (" + ip + ") tu Client: " + socket.getRemoteSocketAddress());
+                        com.Logcollector.server.ServerMain.unblockIp(ip);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[WEBSOCKET COMMAND ERROR] " + e.getMessage());
+            }
+        }
+
+        private String readWebSocketFrame() throws IOException {
+            int b0 = in.read();
+            if (b0 == -1) return null;
+            int opcode = b0 & 0x0F;
+            if (opcode == 0x8) { // Opcode 0x8 = Close frame
+                return null;
+            }
+
+            int b1 = in.read();
+            if (b1 == -1) return null;
+            boolean masked = (b1 & 0x80) != 0;
+            long payloadLen = b1 & 0x7F;
+
+            if (payloadLen == 126) {
+                int b2 = in.read();
+                int b3 = in.read();
+                if (b2 == -1 || b3 == -1) return null;
+                payloadLen = ((b2 & 0xFF) << 8) | (b3 & 0xFF);
+            } else if (payloadLen == 127) {
+                byte[] lenBytes = new byte[8];
+                readFully(in, lenBytes);
+                long len = 0;
+                for (int i = 0; i < 8; i++) {
+                    len = (len << 8) | (lenBytes[i] & 0xFF);
+                }
+                payloadLen = len;
+            }
+
+            if (payloadLen < 0 || payloadLen > 10 * 1024 * 1024) {
+                throw new IOException("Kich thuoc frame qua lon: " + payloadLen);
+            }
+
+            byte[] mask = new byte[4];
+            if (masked) {
+                readFully(in, mask);
+            }
+
+            byte[] payload = new byte[(int) payloadLen];
+            readFully(in, payload);
+
+            if (masked) {
+                for (int i = 0; i < payload.length; i++) {
+                    payload[i] = (byte) (payload[i] ^ mask[i % 4]);
+                }
+            }
+
+            // Ping frame: Tu dong phan hoi Pong (Opcode 0xA)
+            if (opcode == 0x9) {
+                sendPong(payload);
+                return "";
+            }
+
+            // Text frame: Opcode 0x1
+            if (opcode == 0x1) {
+                return new String(payload, StandardCharsets.UTF_8);
+            }
+
+            return "";
+        }
+
+        private static void readFully(InputStream in, byte[] b) throws IOException {
+            int offset = 0;
+            while (offset < b.length) {
+                int read = in.read(b, offset, b.length - offset);
+                if (read == -1) throw new EOFException("Ket thuc luong WebSocket");
+                offset += read;
+            }
+        }
+
+        private synchronized void sendPong(byte[] payload) {
+            try {
+                if (!socket.isClosed() && isHandshakeComplete) {
+                    ByteArrayOutputStream frame = new ByteArrayOutputStream();
+                    frame.write(0x8A); // FIN=1, Opcode=0xA (Pong)
+                    if (payload == null || payload.length == 0) {
+                        frame.write(0);
+                    } else {
+                        frame.write(payload.length & 0x7F);
+                        frame.write(payload);
+                    }
+                    out.write(frame.toByteArray());
+                    out.flush();
+                }
+            } catch (IOException ignored) {}
         }
 
         // Xử lý WebSocket Handshake chuẩn RFC 6455

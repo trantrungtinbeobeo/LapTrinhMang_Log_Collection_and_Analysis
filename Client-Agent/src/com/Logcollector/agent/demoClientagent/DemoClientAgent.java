@@ -110,7 +110,7 @@ public class DemoClientAgent {
 
     private static void printBanner() {
         String dev = com.Logcollector.agent.SyslogFormatter.getDeviceDescription();
-        String host = System.getProperty("server.host", "127.0.0.1");
+        String host = System.getProperty("server.host", "192.168.100.71");
         System.out.println("==================================================");
         System.out.println("        TRINH DIEU KHOEN DEMO CLIENT AGENT        ");
         System.out.println("   [THIET BI MAY CLIENT]: " + dev);

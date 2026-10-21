@@ -28,18 +28,31 @@ final class DesktopMonitor extends JPanel {
     private final DesktopTheme.Rows<DesktopStatistics.Alert> alerts = new DesktopTheme.Rows<>(
             new String[]{"Thời gian", "Loại cảnh báo / thông báo", "IP", "Nội dung"},
             (r, c) -> switch (c) { case 0 -> r.time(); case 1 -> r.type(); case 2 -> r.ip(); default -> r.message(); });
+    private final DesktopTheme.Rows<DesktopStatistics.BlockedIp> blacklistRows = new DesktopTheme.Rows<>(
+            new String[]{"Thời gian khóa", "Địa chỉ IP", "Lý do vi phạm", "Trạng thái"},
+            (r, c) -> switch (c) {
+                case 0 -> (r.time() == null || r.time().isBlank()) ? "—" : r.time();
+                case 1 -> r.ip();
+                case 2 -> r.reason();
+                default -> "⛔ ĐANG KHÓA";
+            });
+    private final JTable blacklistTable = DesktopTheme.table(blacklistRows);
+    private final JTable alertTable = DesktopTheme.table(alerts);
+    private final JTextField alertSearch = new JTextField(18);
 
     // Top IP panel — Stitch-style bars + hover tooltip
     private List<DesktopStatistics.Ip> displayedIps = List.of();
     private final JTextField ipSearch = new JTextField();
     private final IpBarPanel ipBarPanel = new IpBarPanel();
+    private final ClusterCapacityPanel clusterPanel = new ClusterCapacityPanel();
 
     DesktopMonitor(DesktopController controller) {
         super(new BorderLayout()); this.controller = controller;
         JPanel content = new DesktopTheme.ScrollContent(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(4, 22, 20, 22));
+        content.add(clusterPanel); content.add(Box.createVerticalStrut(12));
         JPanel cards = new JPanel(new GridLayout(1, 6, 10, 0)); cards.setOpaque(false);
-        String[] labels = {"Tổng log nhận", "INFO", "WARNING", "ERROR", "Log/giây", "IP • 10.000 log"};
+        String[] labels = {"Tổng log nhận", "INFO", "WARNING", "ERROR / CRIT", "Log/giây", "IP • 10.000 log"};
         for (int i = 0; i < kpis.length; i++) { kpis[i] = DesktopTheme.title("0", 27); DesktopTheme.foreground(kpis[i], "blue"); cards.add(DesktopTheme.card(labels[i], "", kpis[i])); }
         cards.setMaximumSize(new Dimension(Integer.MAX_VALUE, 94)); content.add(cards); content.add(Box.createVerticalStrut(12));
         content.addComponentListener(new ComponentAdapter() {
@@ -92,10 +105,10 @@ final class DesktopMonitor extends JPanel {
             }
         });
         content.add(middle); content.add(Box.createVerticalStrut(12));
-        JTable eventTable = DesktopTheme.table(groups), liveTable = DesktopTheme.table(logs), alertTable = DesktopTheme.table(alerts);
+        JTable eventTable = DesktopTheme.table(groups), liveTable = DesktopTheme.table(logs);
         activate(eventTable, () -> { int i = eventTable.getSelectedRow(); if (i >= 0 && snapshot != null) controller.details(snapshot, null, groups.rows.get(i).key(), this::showDetails); });
         activate(liveTable, () -> { int i = liveTable.getSelectedRow(); if (i >= 0) showLog(logs.rows.get(i), this); });
-        activate(alertTable, () -> { int i = alertTable.getSelectedRow(); if (i >= 0) showText("Chi tiết cảnh báo", alerts.rows.get(i).toString(), this); });
+        activate(alertTable, () -> { int i = alertTable.getSelectedRow(); if (i >= 0) showAlertDetails(alerts.rows.get(i)); });
         groupQuery.setName("event-query"); logQuery.setName("log-query");
         groupQuery.putClientProperty("JTextField.placeholderText", "Tìm IP hoặc nội dung sự kiện…");
         logQuery.putClientProperty("JTextField.placeholderText", "Tìm IP hoặc nội dung log…");
@@ -105,12 +118,182 @@ final class DesktopMonitor extends JPanel {
         logsPanel.add(filterBar(logLevel, logQuery, null), BorderLayout.NORTH);
         logsPanel.add(DesktopTheme.card("Log UI đã nhận", "10.000 log gần nhất • mới nhận trước • chọn dòng để đọc đầy đủ", new JScrollPane(liveTable)));
         logsPanel.add(logCount, BorderLayout.SOUTH);
-        alertsPanel.add(DesktopTheme.card("Cảnh báo và thông báo", "Tối đa 1.000 bản tin từ Server • không tự suy đoán tấn công", new JScrollPane(alertTable)));
+
+        // Thanh cong cu Tuong lua va tim kiem tren Desktop App
+        blacklistRows.key = DesktopStatistics.BlockedIp::ip;
+        JPanel firewallControlBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        firewallControlBar.setOpaque(false);
+
+        alertSearch.setName("alert-search");
+        alertSearch.putClientProperty("JTextField.placeholderText", "🔍 Lọc theo IP / lý do vi phạm / nội dung…");
+        alertSearch.setPreferredSize(new Dimension(240, 32));
+        alertSearch.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { filterAlertsAndBlacklist(); }
+            public void removeUpdate(DocumentEvent e) { filterAlertsAndBlacklist(); }
+            public void changedUpdate(DocumentEvent e) { filterAlertsAndBlacklist(); }
+        });
+
+        JButton btnClearSearch = DesktopTheme.button("✕");
+        btnClearSearch.setToolTipText("Xóa từ khóa lọc");
+        btnClearSearch.addActionListener(e -> alertSearch.setText(""));
+
+        JButton btnViewHistory = DesktopTheme.button("📋 Xem lịch sử vi phạm");
+        JButton btnUnblockSelected = DesktopTheme.button("🔓 Bỏ chặn IP đã chọn");
+        JButton btnUnblockAll = DesktopTheme.button("⚡ Mở khóa toàn bộ IP");
+        JLabel hintLabel = DesktopTheme.muted("Bấm đúp IP để xem chi tiết 5 lần vi phạm • Bấm Bỏ chặn để giải phóng IP");
+
+        firewallControlBar.add(DesktopTheme.muted("Bộ lọc:"));
+        firewallControlBar.add(alertSearch);
+        firewallControlBar.add(btnClearSearch);
+        firewallControlBar.add(btnViewHistory);
+        firewallControlBar.add(btnUnblockSelected);
+        firewallControlBar.add(btnUnblockAll);
+        firewallControlBar.add(hintLabel);
+
+        btnUnblockSelected.addActionListener(e -> {
+            String ip = getSelectedFirewallIp();
+            if (ip == null) {
+                JOptionPane.showMessageDialog(this,
+                        "Vui lòng chọn một dòng có chứa địa chỉ IP trong bảng Danh sách đen hoặc bảng Cảnh báo!",
+                        "Chưa chọn IP", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            doUnblockIp(ip);
+        });
+
+        btnUnblockAll.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Bạn có chắc chắn muốn mở khóa toàn bộ các IP trong Danh sách đen Tường lửa không?",
+                    "Xác nhận mở khóa toàn bộ", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            boolean ok = controller.unblockAllIps();
+            if (ok) {
+                JOptionPane.showMessageDialog(this,
+                        "Đã gửi lệnh mở khóa toàn bộ IP tới Tường lửa Server thành công!\nToàn bộ danh sách đen Tường lửa trên Server đã được giải phóng.",
+                        "Gỡ chặn toàn bộ", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Không thể gửi lệnh mở khóa tới Server. Vui lòng kiểm tra kết nối!",
+                        "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnViewHistory.addActionListener(e -> {
+            String ip = getSelectedFirewallIp();
+            if (ip == null) {
+                String input = JOptionPane.showInputDialog(this,
+                        "Chọn một IP từ bảng hoặc nhập địa chỉ IP cần xem lịch sử vi phạm:",
+                        "Xem lịch sử vi phạm", JOptionPane.QUESTION_MESSAGE);
+                if (input != null && !input.isBlank()) {
+                    ip = input.trim();
+                } else {
+                    return;
+                }
+            }
+            showViolationHistory(ip);
+        });
+
+        activate(blacklistTable, () -> {
+            int i = blacklistTable.getSelectedRow();
+            if (i >= 0 && i < blacklistRows.getRowCount()) {
+                showViolationHistory(blacklistRows.rows.get(i).ip());
+            }
+        });
+
+        JPopupMenu blackPopup = new JPopupMenu();
+        JMenuItem miUnblockBlack = new JMenuItem("🔓 Bỏ chặn IP này khỏi Tường lửa");
+        JMenuItem miHistoryBlack = new JMenuItem("📋 Xem chi tiết lịch sử vi phạm");
+        JMenuItem miFilterBlack = new JMenuItem("🔍 Lọc các bản tin theo IP này");
+        blackPopup.add(miUnblockBlack);
+        blackPopup.add(miHistoryBlack);
+        blackPopup.addSeparator();
+        blackPopup.add(miFilterBlack);
+
+        miUnblockBlack.addActionListener(e -> {
+            int i = blacklistTable.getSelectedRow();
+            if (i >= 0 && i < blacklistRows.getRowCount()) {
+                doUnblockIp(blacklistRows.rows.get(i).ip());
+            }
+        });
+        miHistoryBlack.addActionListener(e -> {
+            int i = blacklistTable.getSelectedRow();
+            if (i >= 0 && i < blacklistRows.getRowCount()) {
+                showViolationHistory(blacklistRows.rows.get(i).ip());
+            }
+        });
+        miFilterBlack.addActionListener(e -> {
+            int i = blacklistTable.getSelectedRow();
+            if (i >= 0 && i < blacklistRows.getRowCount()) {
+                alertSearch.setText(blacklistRows.rows.get(i).ip());
+            }
+        });
+        blacklistTable.setComponentPopupMenu(blackPopup);
+
+        JPopupMenu alertPopup = new JPopupMenu();
+        JMenuItem miUnblockAlert = new JMenuItem("🔓 Bỏ chặn IP này khỏi Tường lửa");
+        JMenuItem miHistoryAlert = new JMenuItem("📋 Xem chi tiết lịch sử vi phạm");
+        JMenuItem miFilterAlert = new JMenuItem("🔍 Lọc các bản tin theo IP này");
+        alertPopup.add(miUnblockAlert);
+        alertPopup.add(miHistoryAlert);
+        alertPopup.addSeparator();
+        alertPopup.add(miFilterAlert);
+
+        miUnblockAlert.addActionListener(e -> {
+            int i = alertTable.getSelectedRow();
+            if (i >= 0 && i < alerts.getRowCount()) {
+                String ip = alerts.rows.get(i).ip();
+                if (hasValidIp(ip)) doUnblockIp(ip);
+            }
+        });
+        miHistoryAlert.addActionListener(e -> {
+            int i = alertTable.getSelectedRow();
+            if (i >= 0 && i < alerts.getRowCount()) {
+                String ip = alerts.rows.get(i).ip();
+                if (hasValidIp(ip)) showViolationHistory(ip);
+            }
+        });
+        miFilterAlert.addActionListener(e -> {
+            int i = alertTable.getSelectedRow();
+            if (i >= 0 && i < alerts.getRowCount()) {
+                String ip = alerts.rows.get(i).ip();
+                if (hasValidIp(ip)) alertSearch.setText(ip);
+            }
+        });
+        alertTable.setComponentPopupMenu(alertPopup);
+
+        blacklistTable.getColumnModel().getColumn(0).setPreferredWidth(140);
+        blacklistTable.getColumnModel().getColumn(1).setPreferredWidth(130);
+        blacklistTable.getColumnModel().getColumn(2).setPreferredWidth(210);
+        blacklistTable.getColumnModel().getColumn(3).setPreferredWidth(100);
+
+        alertTable.getColumnModel().getColumn(0).setPreferredWidth(130);
+        alertTable.getColumnModel().getColumn(1).setPreferredWidth(130);
+        alertTable.getColumnModel().getColumn(2).setPreferredWidth(110);
+        alertTable.getColumnModel().getColumn(3).setPreferredWidth(320);
+
+        JPanel blacklistCard = DesktopTheme.card("🛡️ Danh sách đen Tường lửa (Blacklist)",
+                "Các IP vi phạm bị giam giữ trong BLOCKED_IPS • Click đúp để xem chi tiết vi phạm",
+                new JScrollPane(blacklistTable));
+        blacklistCard.setMinimumSize(new Dimension(380, 200));
+
+        JPanel alertCard = DesktopTheme.card("⚠️ Nhật ký Cảnh báo hệ thống",
+                "Tối đa 1.000 bản tin an ninh từ Server • Click đúp để đọc chi tiết hoặc Bỏ chặn",
+                new JScrollPane(alertTable));
+        alertCard.setMinimumSize(new Dimension(420, 200));
+
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, blacklistCard, alertCard);
+        splitPane.setResizeWeight(0.42);
+        splitPane.setDividerSize(6);
+        splitPane.setBorder(null);
+        splitPane.setOpaque(false);
+
+        alertsPanel.add(firewallControlBar, BorderLayout.NORTH);
+        alertsPanel.add(splitPane, BorderLayout.CENTER);
         alertsPanel.add(alertCount, BorderLayout.SOUTH);
         for (JPanel page : new JPanel[]{logsPanel, eventsPanel, alertsPanel}) page.setBorder(BorderFactory.createEmptyBorder(4, 22, 12, 22));
         liveTable.getColumnModel().getColumn(4).setPreferredWidth(360);
         eventTable.getColumnModel().getColumn(0).setPreferredWidth(300);
-        alertTable.getColumnModel().getColumn(3).setPreferredWidth(400);
         JScrollPane scroll = new JScrollPane(content); scroll.getVerticalScrollBar().setUnitIncrement(24); scroll.setBorder(null); add(scroll);
         DocumentListener change = new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { filters(); } public void removeUpdate(DocumentEvent e) { filters(); } public void changedUpdate(DocumentEvent e) { filters(); }
@@ -145,16 +328,22 @@ final class DesktopMonitor extends JPanel {
     }
     void update(DesktopController.View view) {
         snapshot = view.data();
-        long[] values = {snapshot.total(), snapshot.severity().getOrDefault("INFO", 0L), snapshot.severity().getOrDefault("WARNING", 0L), snapshot.severity().getOrDefault("ERROR", 0L), snapshot.current() == null ? 0 : snapshot.current(), snapshot.ipCount()};
+        long errorOrCrit = snapshot.severity().getOrDefault("ERROR", 0L)
+                + snapshot.severity().getOrDefault("CRITICAL", 0L)
+                + snapshot.severity().getOrDefault("ALERT", 0L)
+                + snapshot.severity().getOrDefault("EMERGENCY", 0L);
+        long[] values = {snapshot.total(), snapshot.severity().getOrDefault("INFO", 0L), snapshot.severity().getOrDefault("WARNING", 0L), errorOrCrit, snapshot.current() == null ? 0 : snapshot.current(), snapshot.ipCount()};
         for (int i = 0; i < kpis.length; i++) kpis[i].setText(i == 4 && snapshot.current() == null ? "—" : String.format("%,d", values[i]));
+        clusterPanel.update(snapshot);
         traffic.update(snapshot); severity.update(snapshot.severity());
         rates.setText(String.format("Hiện tại: %s  |  Trung bình: %,.2f  |  Đỉnh: %,d log/giây  |  Trục Y: 0–%,.0f", snapshot.current() == null ? "—" : snapshot.current(), snapshot.average(), snapshot.peak(), snapshot.axisMax()));
         // Re-filter IPs preserving search text
         filterIps();
-        groups.set(snapshot.groups()); logs.set(snapshot.logs()); alerts.set(snapshot.alerts());
+        groups.set(snapshot.groups());
+        logs.set(snapshot.logs());
+        filterAlertsAndBlacklist();
         logCount.setText(logs.getRowCount() + " log phù hợp / " + snapshot.retained() + " log đang giữ • Bộ lọc không thay đổi KPI");
         groupCount.setText(groups.getRowCount() + " nhóm phù hợp • Số lần và chi tiết tính trên toàn bộ nhóm");
-        alertCount.setText(alerts.getRowCount() + " cảnh báo / thông báo đang giữ");
     }
     DesktopStatistics.Snapshot currentSnapshot() { return snapshot; }
     private static JComboBox<String> levels() { return new JComboBox<>(new String[]{"Tất cả", "INFO", "WARNING", "ERROR", "CRITICAL", "ALERT", "EMERGENCY", "NOTICE", "DEBUG", "UNKNOWN"}); }
@@ -180,6 +369,271 @@ final class DesktopMonitor extends JPanel {
                 + "\nFacility: " + (log.raw().isBlank() ? "Không được Server cung cấp" : e.getFacility())
                 + "\n\nNội dung:\n" + e.getMessage() + "\n\nRaw:\n" + log.raw(), parent);
     }
+    private void showAlertDetails(DesktopStatistics.Alert alert) {
+        String ip = alert.ip();
+        boolean hasIp = ip != null && !ip.isBlank() && !"—".equals(ip) && !"-".equals(ip);
+        boolean isBlocked = hasIp && controller.isIpBlocked(ip);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Thời gian: ").append(alert.time()).append("\n");
+        sb.append("Loại cảnh báo: ").append(alert.type()).append("\n");
+        sb.append("Địa chỉ IP: ").append(hasIp ? ip : "Không có").append("\n");
+        sb.append("Trạng thái Tường lửa: ").append(isBlocked ? "ĐANG BỊ KHÓA (BLOCKED)" : "Bình thường / Chưa bị khóa").append("\n\n");
+        sb.append("Nội dung chi tiết:\n").append(alert.message());
+
+        JTextArea area = new JTextArea(sb.toString(), 12, 60);
+        area.setEditable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setCaretPosition(0);
+
+        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        panel.add(new JScrollPane(area), BorderLayout.CENTER);
+
+        if (hasIp) {
+            JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+            JButton btnHistory = DesktopTheme.button("📋 Xem lịch sử vi phạm");
+            JButton btnUnblock = DesktopTheme.button(isBlocked ? "🔓 Mở khóa / Bỏ chặn IP này" : "🔓 Bỏ chặn IP này khỏi Tường lửa");
+            btnPanel.add(btnHistory);
+            btnPanel.add(btnUnblock);
+            panel.add(btnPanel, BorderLayout.SOUTH);
+
+            btnHistory.addActionListener(e -> {
+                Window w = SwingUtilities.getWindowAncestor(btnHistory);
+                if (w != null) w.dispose();
+                showViolationHistory(ip);
+            });
+            btnUnblock.addActionListener(e -> {
+                boolean ok = controller.unblockIp(ip);
+                if (ok) {
+                    JOptionPane.showMessageDialog(this, "Đã mở khóa / bỏ chặn IP " + ip + " thành công!", "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "IP " + ip + " hiện không nằm trong danh sách đen hoặc đã được mở khóa trước đó.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                }
+            });
+        }
+
+        JOptionPane.showMessageDialog(this, panel, "Chi tiết cảnh báo", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private void filterAlertsAndBlacklist() {
+        if (snapshot == null) return;
+        String q = alertSearch.getText().trim().toLowerCase(Locale.ROOT);
+        if (q.isEmpty()) {
+            blacklistRows.set(snapshot.blockedIps());
+            alerts.set(snapshot.alerts());
+        } else {
+            blacklistRows.set(snapshot.blockedIps().stream()
+                    .filter(b -> b.ip().toLowerCase(Locale.ROOT).contains(q)
+                            || b.reason().toLowerCase(Locale.ROOT).contains(q))
+                    .toList());
+            alerts.set(snapshot.alerts().stream()
+                    .filter(a -> (a.ip() != null && a.ip().toLowerCase(Locale.ROOT).contains(q))
+                            || (a.type() != null && a.type().toLowerCase(Locale.ROOT).contains(q))
+                            || (a.message() != null && a.message().toLowerCase(Locale.ROOT).contains(q)))
+                    .toList());
+        }
+        alertCount.setText(alerts.getRowCount() + " cảnh báo / thông báo • "
+                + blacklistRows.getRowCount() + " IP trong danh sách đen Tường lửa"
+                + (q.isEmpty() ? "" : " (Đang áp dụng bộ lọc: \"" + q + "\")"));
+    }
+
+    private String getSelectedFirewallIp() {
+        int blackIdx = blacklistTable.getSelectedRow();
+        if (blackIdx >= 0 && blackIdx < blacklistRows.getRowCount()) {
+            String ip = blacklistRows.rows.get(blackIdx).ip();
+            if (hasValidIp(ip)) return ip.trim();
+        }
+        int alertIdx = alertTable.getSelectedRow();
+        if (alertIdx >= 0 && alertIdx < alerts.getRowCount()) {
+            String ip = alerts.rows.get(alertIdx).ip();
+            if (hasValidIp(ip)) return ip.trim();
+        }
+        return null;
+    }
+
+    private static boolean hasValidIp(String ip) {
+        return ip != null && !ip.isBlank() && !"—".equals(ip) && !"-".equals(ip) && !"TẤT CẢ IP".equals(ip) && !"ALL".equalsIgnoreCase(ip);
+    }
+
+    private void doUnblockIp(String ip) {
+        if (!hasValidIp(ip)) {
+            JOptionPane.showMessageDialog(this, "Dòng được chọn không chứa địa chỉ IP hợp lệ!", "Không có IP", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        boolean ok = controller.unblockIp(ip);
+        if (ok) {
+            JOptionPane.showMessageDialog(this,
+                    "Đã gửi lệnh gỡ chặn IP " + ip + " tới Tường lửa Server!\nIP này đã được mở khóa và xóa khỏi danh sách đen.",
+                    "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                    "Không thể gửi lệnh gỡ chặn tới Server. Vui lòng kiểm tra kết nối!",
+                    "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    void showViolationHistory(String targetIp) {
+        if (!hasValidIp(targetIp)) {
+            JOptionPane.showMessageDialog(this, "Địa chỉ IP không hợp lệ!", "Lỗi", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String cleanIp = targetIp.trim();
+        List<DesktopLog> allLogs = (snapshot != null) ? snapshot.allLogs() : List.of();
+
+        List<DesktopLog> ipLogs = allLogs.stream()
+                .filter(l -> cleanIp.equalsIgnoreCase(l.event().getIp()))
+                .toList();
+
+        List<DesktopLog> violations = ipLogs.stream()
+                .filter(l -> {
+                    String msg = l.event().getMessage() != null ? l.event().getMessage().toLowerCase(Locale.ROOT) : "";
+                    String sev = l.event().getSeverityLevel() != null ? l.event().getSeverityLevel() : "";
+                    return msg.contains("failed password") || msg.contains("invalid user")
+                            || msg.contains("authentication failure") || msg.contains("break-in")
+                            || "WARNING".equalsIgnoreCase(sev) || "CRITICAL".equalsIgnoreCase(sev) || "ERROR".equalsIgnoreCase(sev);
+                })
+                .toList();
+
+        List<DesktopLog> displayList = violations.isEmpty() ? ipLogs : violations;
+        boolean isBlocked = controller.isIpBlocked(cleanIp);
+
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this),
+                "Chi tiết lịch sử vi phạm Tường lửa • IP " + cleanIp, Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setLayout(new BorderLayout(0, 12));
+
+        JPanel headerPanel = new JPanel();
+        headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(14, 18, 6, 18));
+        DesktopTheme.surface(headerPanel);
+
+        JPanel titleRow = new JPanel(new BorderLayout(12, 0));
+        titleRow.setOpaque(false);
+        JLabel lblIp = DesktopTheme.title("IP: " + cleanIp, 18);
+        DesktopTheme.foreground(lblIp, "blue");
+
+        JLabel lblStatus = new JLabel(isBlocked ? "⛔ ĐANG BỊ KHÓA TRONG TƯỜNG LỬA" : "✅ Trạng thái: Bình thường / Chưa bị khóa");
+        lblStatus.setFont(lblStatus.getFont().deriveFont(Font.BOLD, 13f));
+        lblStatus.setForeground(isBlocked ? DesktopTheme.severity("CRITICAL") : DesktopTheme.severity("INFO"));
+        titleRow.add(lblIp, BorderLayout.WEST);
+        titleRow.add(lblStatus, BorderLayout.EAST);
+        headerPanel.add(titleRow);
+
+        headerPanel.add(Box.createVerticalStrut(6));
+        String summaryText = violations.isEmpty()
+                ? "Không phát hiện log lỗi xác thực đặc thù. Hiển thị " + displayList.size() + " log ghi nhận từ IP này."
+                : "Phát hiện " + violations.size() + " lần thử sai mật khẩu / vi phạm an ninh (Ngưỡng tự động khóa là 5 lần vi phạm liên tiếp)";
+        JLabel lblSummary = DesktopTheme.muted(summaryText);
+        headerPanel.add(lblSummary);
+
+        record ViolationEntry(int order, String time, String userAndPort, String severity, String message) {}
+        List<ViolationEntry> entries = new ArrayList<>();
+        for (int idx = 0; idx < displayList.size(); idx++) {
+            DesktopLog dl = displayList.get(idx);
+            String msg = dl.event().getMessage() != null ? dl.event().getMessage() : "";
+            String userAndPort = extractUserAndPort(msg);
+            entries.add(new ViolationEntry(idx + 1, dl.event().getTimestamp(), userAndPort, dl.event().getSeverityLevel(), msg));
+        }
+
+        DesktopTheme.Rows<ViolationEntry> violationRows = new DesktopTheme.Rows<>(
+                new String[]{"# Lần vi phạm", "Thời gian", "Tài khoản đích / Cổng", "Mức độ", "Chi tiết thông điệp Server"},
+                (r, c) -> switch (c) {
+                    case 0 -> (r.order == 5) ? "#5 ⚠️ (Ngưỡng khóa)" : "#" + r.order;
+                    case 1 -> r.time;
+                    case 2 -> r.userAndPort;
+                    case 3 -> r.severity;
+                    default -> r.message;
+                }
+        );
+        violationRows.set(entries);
+        JTable violationTable = DesktopTheme.table(violationRows);
+        violationTable.getColumnModel().getColumn(0).setPreferredWidth(130);
+        violationTable.getColumnModel().getColumn(1).setPreferredWidth(140);
+        violationTable.getColumnModel().getColumn(2).setPreferredWidth(180);
+        violationTable.getColumnModel().getColumn(3).setPreferredWidth(90);
+        violationTable.getColumnModel().getColumn(4).setPreferredWidth(480);
+
+        activate(violationTable, () -> {
+            int sel = violationTable.getSelectedRow();
+            if (sel >= 0 && sel < displayList.size()) {
+                showLog(displayList.get(sel), dialog);
+            }
+        });
+
+        JPanel bottomBar = new JPanel(new BorderLayout());
+        bottomBar.setBorder(BorderFactory.createEmptyBorder(6, 18, 14, 18));
+        bottomBar.setOpaque(false);
+
+        JLabel hint = DesktopTheme.muted("Bấm đúp vào dòng để xem chi tiết log đầy đủ");
+        bottomBar.add(hint, BorderLayout.WEST);
+
+        JPanel btnGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        btnGroup.setOpaque(false);
+        JButton btnUnblockNow = DesktopTheme.button(isBlocked ? "🔓 Mở khóa / Bỏ chặn IP này ngay" : "🔓 Gỡ bỏ IP khỏi Tường lửa");
+        JButton btnClose = DesktopTheme.button("Đóng");
+
+        btnGroup.add(btnUnblockNow);
+        btnGroup.add(btnClose);
+        bottomBar.add(btnGroup, BorderLayout.EAST);
+
+        btnUnblockNow.addActionListener(e -> {
+            boolean ok = controller.unblockIp(cleanIp);
+            if (ok) {
+                lblStatus.setText("✅ Đã mở khóa thành công");
+                lblStatus.setForeground(DesktopTheme.severity("INFO"));
+                btnUnblockNow.setEnabled(false);
+                JOptionPane.showMessageDialog(dialog, "Đã mở khóa IP " + cleanIp + " thành công!", "Bỏ chặn thành công", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(dialog, "Không thể gửi lệnh mở khóa tới Server. Vui lòng kiểm tra kết nối!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnClose.addActionListener(e -> dialog.dispose());
+
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 18));
+        centerPanel.add(new JScrollPane(violationTable), BorderLayout.CENTER);
+
+        dialog.add(headerPanel, BorderLayout.NORTH);
+        dialog.add(centerPanel, BorderLayout.CENTER);
+        dialog.add(bottomBar, BorderLayout.SOUTH);
+
+        dialog.setSize(1080, 520);
+        dialog.setLocationRelativeTo(this);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        dialog.setVisible(true);
+    }
+
+    private static String extractUserAndPort(String msg) {
+        if (msg == null || msg.isBlank()) return "—";
+        String lower = msg.toLowerCase(Locale.ROOT);
+        String user = "";
+        String port = "";
+        if (lower.contains("for invalid user ")) {
+            int start = lower.indexOf("for invalid user ") + "for invalid user ".length();
+            int end = lower.indexOf(" from", start);
+            user = (end > start) ? msg.substring(start, end).trim() + " (Invalid)" : "";
+        } else if (lower.contains("for illegal user ")) {
+            int start = lower.indexOf("for illegal user ") + "for illegal user ".length();
+            int end = lower.indexOf(" from", start);
+            user = (end > start) ? msg.substring(start, end).trim() + " (Illegal)" : "";
+        } else if (lower.contains("for ")) {
+            int start = lower.indexOf("for ") + "for ".length();
+            int end = lower.indexOf(" from", start);
+            user = (end > start) ? msg.substring(start, end).trim() : "";
+        }
+        if (lower.contains("port ")) {
+            int start = lower.indexOf("port ") + "port ".length();
+            int end = lower.indexOf(" ", start);
+            if (end < 0) end = lower.length();
+            port = msg.substring(start, end).trim();
+        }
+        if (!user.isEmpty() && !port.isEmpty()) return user + " (port " + port + ")";
+        if (!user.isEmpty()) return user;
+        if (!port.isEmpty()) return "port " + port;
+        return "—";
+    }
+
     static void showText(String title, String text, Component parent) {
         JTextArea area = new JTextArea(text, 18, 75); area.setEditable(false); area.setLineWrap(true); area.setWrapStyleWord(true); area.setCaretPosition(0);
         JOptionPane.showMessageDialog(parent, new JScrollPane(area), title, JOptionPane.PLAIN_MESSAGE);
@@ -405,5 +859,216 @@ final class DesktopMonitor extends JPanel {
         var model = logRows(); model.set(records); JTable table = DesktopTheme.table(model);
         activate(table, () -> { int i = table.getSelectedRow(); if (i >= 0) showLog(model.rows.get(i), dialog); });
         dialog.add(new JScrollPane(table)); dialog.setSize(1080, 460); dialog.setLocationRelativeTo(this); dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE); dialog.setVisible(true);
+    }
+
+    static final class ClusterCapacityPanel extends JPanel {
+        private final JLabel titleLabel = new JLabel("⚡ DUNG LƯỢNG SERVER 1 & TRẠNG THÁI CỤM 2 SERVER");
+        private final JLabel statusBadge = new JLabel(" STANDALONE (AN TOÀN) ");
+        private final JLabel timeLabel = new JLabel("🕒 —");
+        private final JLabel countLabel = new JLabel("Tiến độ: 0 / 2,000 log (0.0%)");
+        private final JLabel node2Label = new JLabel("Server 2: ⛔ Offline (Chưa kết nối)");
+        private final CapacityBar progressBar = new CapacityBar();
+        private final JLabel hintLabel = new JLabel("💡 Hệ thống đang chạy ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.");
+        private final JPanel hintBox = new JPanel(new BorderLayout());
+
+        ClusterCapacityPanel() {
+            super(new BorderLayout(0, 8));
+            DesktopTheme.surface(this);
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(DesktopTheme.BORDER, 1, true),
+                    BorderFactory.createEmptyBorder(12, 16, 12, 16)
+            ));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 155));
+
+            titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+            titleLabel.setForeground(DesktopTheme.INK);
+
+            statusBadge.setFont(statusBadge.getFont().deriveFont(Font.BOLD, 11f));
+            statusBadge.setOpaque(true);
+            statusBadge.setBackground(new Color(0x10b981));
+            statusBadge.setForeground(Color.WHITE);
+            statusBadge.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+
+            timeLabel.setFont(timeLabel.getFont().deriveFont(11f));
+            timeLabel.setForeground(DesktopTheme.MUTED);
+
+            JPanel top = new JPanel(new BorderLayout(8, 0));
+            top.setOpaque(false);
+            JPanel topLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            topLeft.setOpaque(false);
+            topLeft.add(titleLabel);
+            topLeft.add(statusBadge);
+            top.add(topLeft, BorderLayout.WEST);
+            top.add(timeLabel, BorderLayout.EAST);
+
+            countLabel.setFont(countLabel.getFont().deriveFont(Font.BOLD, 15f));
+            countLabel.setForeground(new Color(0x10b981));
+
+            node2Label.setFont(node2Label.getFont().deriveFont(Font.BOLD, 12f));
+            node2Label.setForeground(DesktopTheme.MUTED);
+
+            JPanel mid = new JPanel(new BorderLayout(8, 0));
+            mid.setOpaque(false);
+            mid.add(countLabel, BorderLayout.WEST);
+            mid.add(node2Label, BorderLayout.EAST);
+
+            progressBar.setPreferredSize(new Dimension(800, 14));
+
+            hintBox.setOpaque(true);
+            hintBox.setBackground(new Color(0x10, 0xb9, 0x81, 24));
+            hintBox.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(0x10, 0xb9, 0x81, 80), 1, true),
+                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
+            ));
+            hintLabel.setFont(hintLabel.getFont().deriveFont(12f));
+            hintLabel.setForeground(DesktopTheme.INK);
+            hintBox.add(hintLabel, BorderLayout.CENTER);
+
+            JPanel center = new JPanel();
+            center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+            center.setOpaque(false);
+            center.add(mid);
+            center.add(Box.createVerticalStrut(6));
+            center.add(progressBar);
+            center.add(Box.createVerticalStrut(8));
+            center.add(hintBox);
+
+            add(top, BorderLayout.NORTH);
+            add(center, BorderLayout.CENTER);
+        }
+
+        void update(DesktopStatistics.Snapshot snapshot) {
+            if (snapshot == null) return;
+            DesktopStatistics.ClusterState cs = snapshot.cluster();
+            long total = snapshot.total();
+            int limit = cs.limit() > 0 ? cs.limit() : 2000;
+            boolean active = cs.active();
+            boolean overloaded = cs.overloaded() || (!active && total >= limit);
+            double percent = active ? 100.0 : Math.min(100.0, (total * 100.0) / limit);
+
+            String timeStr = (cs.timestamp() != null && !cs.timestamp().isBlank()) ? cs.timestamp() :
+                    java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            timeLabel.setText("🕒 " + timeStr);
+
+            Color color;
+            String badgeText;
+            Color badgeBg;
+            Color hintBorder;
+            Color hintBg;
+            String hintText;
+
+            if (active) {
+                color = new Color(0x0284c7);
+                badgeText = " 🟢 CỤM 2 SERVER HOẠT ĐỘNG (SCALE-OUT KHÔNG GIỚI HẠN) ";
+                badgeBg = new Color(0x0284c7);
+                hintBorder = new Color(0x02, 0x84, 0xc7, 100);
+                hintBg = new Color(0x02, 0x84, 0xc7, 24);
+                hintText = (cs.message() != null && !cs.message().isBlank()) ? cs.message()
+                        : "🟢 CỤM 2 SERVER ĐANG ĐỒNG BỘ: Toàn bộ dữ liệu sao lưu sang ServerBackup (logs_backup.db). Giới hạn 2.000 log đã được dỡ bỏ!";
+                countLabel.setText(String.format("%,d log • CỤM 2 SERVER ĐANG MỞ RỘNG TỰ DO", total));
+                int syn = cs.secondarySynced() > 0 ? cs.secondarySynced() : (int) total;
+                node2Label.setText(String.format("Server 2: 🟢 Online • logs_backup.db (%,d log)", syn));
+                node2Label.setForeground(new Color(0x10b981));
+            } else if (overloaded) {
+                color = new Color(0xef4444);
+                badgeText = " 🛑 SERVER 1 QUÁ TẢI (CIRCUIT BREAKER - ĐỢI SERVER 2) ";
+                badgeBg = new Color(0xdc2626);
+                hintBorder = new Color(0xdc, 0x26, 0x26, 120);
+                hintBg = new Color(0xdc, 0x26, 0x26, 30);
+                hintText = "🛑 SERVER 1 QUÁ TẢI (ĐÃ ĐẠT 2.000 LOG) - Tạm dừng nạp CSDL để bảo vệ hệ thống. Đang đợi Server 2 được mở để giải phóng...";
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (100.0%%) - QUÁ TẢI", total, limit));
+                node2Label.setText("Server 2: ⚠️ Offline (Cần mở ServerBackupMain để cứu nguy!)");
+                node2Label.setForeground(new Color(0xef4444));
+            } else if (percent >= 85.0) {
+                color = new Color(0xf97316);
+                badgeText = " ⚡ SẮP VƯỢT NGƯỠNG (HÃY BẬT SERVER 2) ";
+                badgeBg = new Color(0xea580c);
+                hintBorder = new Color(0xea, 0x58, 0x0c, 100);
+                hintBg = new Color(0xea, 0x58, 0x0c, 24);
+                hintText = String.format("⚡ SẮP VƯỢT NGƯỠNG 2.000 LOG (%.1f%%)! Vui lòng khởi động Server 2 (ServerBackupMain) để mở rộng dung lượng và tránh nghẽn!", percent);
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (%.1f%%)", total, limit, percent));
+                node2Label.setText("Server 2: ⛔ Offline (Chưa kết nối)");
+                node2Label.setForeground(DesktopTheme.MUTED);
+            } else if (percent >= 60.0) {
+                color = new Color(0xf59e0b);
+                badgeText = " ⚠️ TẢI TĂNG CAO (CHUẨN BỊ SERVER 2) ";
+                badgeBg = new Color(0xd97706);
+                hintBorder = new Color(0xd9, 0x77, 0x06, 100);
+                hintBg = new Color(0xd9, 0x77, 0x06, 24);
+                hintText = String.format("⚠️ Lưu lượng log đang tăng cao (%.1f%%). Chuẩn bị sẵn sàng Server 2 để phân tải khi cần.", percent);
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (%.1f%%)", total, limit, percent));
+                node2Label.setText("Server 2: ⛔ Offline (Chưa kết nối)");
+                node2Label.setForeground(DesktopTheme.MUTED);
+            } else {
+                color = new Color(0x10b981);
+                badgeText = " STANDALONE (AN TOÀN) ";
+                badgeBg = new Color(0x059669);
+                hintBorder = new Color(0x05, 0x96, 0x69, 100);
+                hintBg = new Color(0x05, 0x96, 0x69, 24);
+                hintText = "💡 Hệ thống đang chạy ổn định ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.";
+                countLabel.setText(String.format("Tiến độ: %,d / %,d log (%.1f%%)", total, limit, percent));
+                node2Label.setText("Server 2: ⛔ Offline (Chưa kết nối)");
+                node2Label.setForeground(DesktopTheme.MUTED);
+            }
+
+            countLabel.setForeground(color);
+            statusBadge.setText(badgeText);
+            statusBadge.setBackground(badgeBg);
+            hintLabel.setText(hintText);
+            hintBox.setBackground(hintBg);
+            hintBox.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(hintBorder, 1, true),
+                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
+            ));
+
+            progressBar.setProgress(percent, color, active);
+            repaint();
+        }
+    }
+
+    static final class CapacityBar extends JComponent {
+        private double percent = 0.0;
+        private Color barColor = new Color(0x10b981);
+        private boolean isCluster = false;
+
+        void setProgress(double percent, Color color, boolean isCluster) {
+            this.percent = Math.max(0.0, Math.min(100.0, percent));
+            this.barColor = color;
+            this.isCluster = isCluster;
+            repaint();
+        }
+
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = getWidth(), h = getHeight();
+                int arc = h;
+
+                // Nen xam
+                g2.setColor(new Color(0x80, 0x80, 0x80, 40));
+                g2.fillRoundRect(0, 0, w, h, arc, arc);
+
+                // Thanh fill tien do
+                int fillW = (int) Math.round((w * percent) / 100.0);
+                if (fillW > 0) {
+                    if (isCluster) {
+                        GradientPaint gp = new GradientPaint(0, 0, new Color(0x06b6d4), fillW, 0, new Color(0x6366f1));
+                        g2.setPaint(gp);
+                    } else {
+                        GradientPaint gp = new GradientPaint(0, 0, barColor.brighter(), fillW, 0, barColor);
+                        g2.setPaint(gp);
+                    }
+                    g2.fillRoundRect(0, 0, fillW, h, arc, arc);
+                }
+
+                // Vien ngoai
+                g2.setColor(new Color(0x80, 0x80, 0x80, 60));
+                g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+            } finally {
+                g2.dispose();
+            }
+        }
     }
 }

@@ -58,6 +58,13 @@ public class PortScanRule {
         scanHistory.remove(sourceIp);
     }
 
+    /**
+     * Đặt lại toàn bộ lịch sử quét của tất cả IP khi quản trị viên mở khóa Tường lửa
+     */
+    public void resetAll() {
+        scanHistory.clear();
+    }
+
     // Lớp nội bộ lưu trữ các cổng đích và mốc thời gian bắt đầu quét
     private static class ScanRecord {
         final long startTime;

@@ -6,6 +6,7 @@ import java.util.*;
 final class DesktopStatistics {
     static final int LOG_LIMIT = 10_000, ALERT_LIMIT = 1_000, WINDOW = 300;
     record Alert(String time, String type, String ip, String message) {}
+    record BlockedIp(String ip, String reason, String time) {}
     record Rate(long second, long count, boolean available) {}
     record Ip(String address, long count, Map<String, Long> severity, String latestTime) {}
     record Group(String key, String title, String severity, long count, String ips, String latest) {}
@@ -15,15 +16,23 @@ final class DesktopStatistics {
             return (level.equals("Tất cả") || level.equals(log.event().getSeverityLevel())) && log.matches(query);
         }
     }
+    record ClusterState(boolean active, boolean overloaded, int limit, double percent, String status, String message, int secondarySynced, String timestamp) {
+        static ClusterState standalone() {
+            return new ClusterState(false, false, 2000, 0.0, "STANDALONE_OK", "💡 Hệ thống đang chạy ở chế độ Standalone. Giới hạn dung lượng an toàn: 2.000 log.", 0, "");
+        }
+    }
     record Snapshot(long total, Map<String, Long> severity, int ipCount, int retained,
                     List<Ip> ips, List<Group> groups, List<DesktopLog> logs, List<DesktopLog> allLogs, List<Alert> alerts,
                     List<Rate> rates, Long current, double average, long peak, double axisMax,
-                    long startedAt, boolean everDisconnected) {}
+                    long startedAt, boolean everDisconnected, List<BlockedIp> blockedIps,
+                    ClusterState cluster) {}
     private static final class Bucket { long count; boolean available; Bucket(boolean value) { available = value; } }
     private final ArrayDeque<DesktopLog> logs = new ArrayDeque<>();
     private final ArrayDeque<Alert> alerts = new ArrayDeque<>();
+    private final Map<String, BlockedIp> blockedIps = new LinkedHashMap<>();
     private final Map<String, Long> severity = new TreeMap<>();
     private final NavigableMap<Long, Bucket> rates = new TreeMap<>();
+    private ClusterState cluster = ClusterState.standalone();
     private final long startedAt;
     private long total, lastSecond;
     private boolean connected, connectedBefore, everDisconnected;
@@ -55,6 +64,36 @@ final class DesktopStatistics {
     synchronized void alert(Alert alert) {
         alerts.addFirst(alert);
         if (alerts.size() > ALERT_LIMIT) alerts.removeLast();
+    }
+    synchronized void clearBlockedAlerts() {
+        alerts.removeIf(a -> "IP_BLOCKED".equals(a.type()));
+    }
+    synchronized void removeBlockedAlertForIp(String ip) {
+        if (ip != null) {
+            alerts.removeIf(a -> "IP_BLOCKED".equals(a.type()) && ip.equals(a.ip()));
+        }
+    }
+    synchronized void blockIp(String ip, String reason, String time) {
+        if (ip != null && !ip.isBlank() && !"TẤT CẢ IP".equals(ip) && !"ALL".equalsIgnoreCase(ip)) {
+            blockedIps.put(ip.trim(), new BlockedIp(ip.trim(), (reason != null && !reason.isBlank()) ? reason : "Tự động khóa do đạt ngưỡng nguy hiểm CRITICAL", (time != null && !time.isBlank()) ? time : ""));
+        }
+    }
+    synchronized void unblockIp(String ip) {
+        if (ip != null) {
+            blockedIps.remove(ip.trim());
+        }
+    }
+    synchronized void unblockAll() {
+        blockedIps.clear();
+    }
+    synchronized void updateCluster(ClusterState state) {
+        if (state != null) this.cluster = state;
+    }
+    synchronized ClusterState cluster() {
+        return cluster;
+    }
+    synchronized boolean isBlocked(String ip) {
+        return ip != null && blockedIps.containsKey(ip.trim());
     }
     synchronized Snapshot snapshot(long now, Filter groupFilter, Filter logFilter) {
         advance(now);
@@ -109,6 +148,7 @@ final class DesktopStatistics {
         double max = Math.ceil((peak + 100.0) / 25.0) * 25;
         return new Snapshot(total, Map.copyOf(severity), ips.size(), logs.size(), ips, List.copyOf(groups),
                 List.copyOf(visible), List.copyOf(all), List.copyOf(alerts), List.copyOf(samples), current,
-                seconds == 0 ? 0 : (double) sum / seconds, peak, max, startedAt, everDisconnected);
+                seconds == 0 ? 0 : (double) sum / seconds, peak, max, startedAt, everDisconnected,
+                List.copyOf(blockedIps.values()), cluster);
     }
 }

@@ -16,7 +16,9 @@ public class UDPReceiver implements Runnable {
     @Override
     public void run() {
         try {
-            socket = new DatagramSocket(port);
+            socket = new DatagramSocket(null);
+            socket.setReuseAddress(true);
+            socket.bind(new java.net.InetSocketAddress(port));
             System.out.println("[UDP Receiver] Dang lang nghe tren cong UDP " + port + "...");
             byte[] buffer = new byte[65507]; // Kích thước tối đa của UDP datagram
 
